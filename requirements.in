@@ -1,0 +1,6 @@
+# Dependencias directas. requirements.txt se genera con pip-compile y hashes.
+aiomysql==0.3.2
+python-dotenv==1.2.4
+cryptography==50.0.2
+Django==5.2.17
+uvicorn==0.54.0

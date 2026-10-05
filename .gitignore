@@ -1,0 +1,53 @@
+# Configuracion privada: solo se comparte la plantilla vacia.
+.env
+.env.*
+!.env.example
+*.env
+
+# Entornos y archivos generados por Python.
+.venv/
+venv/
+.tools-venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Datos locales, logs y respaldos no son codigo fuente.
+logs/
+*.log
+data/
+backups/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz
+dump*.sql
+backup*.sql
+*.bak
+*.zip
+*.7z
+*.rar
+
+# Claves y certificados privados.
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.kdbx
+
+# Archivos personales de Windows y editores.
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/

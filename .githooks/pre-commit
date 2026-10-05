@@ -1,0 +1,10 @@
+#!/bin/sh
+# Git for Windows ejecuta hooks con sh. Se audita lo staged, no solo el disco.
+if [ -x .venv/Scripts/python.exe ]; then
+    exec .venv/Scripts/python.exe tools/check_repository.py
+elif [ -x .venv/bin/python ]; then
+    exec .venv/bin/python tools/check_repository.py
+else
+    echo "Falta .venv. Instala requirements.txt antes de crear el commit." >&2
+    exit 1
+fi
