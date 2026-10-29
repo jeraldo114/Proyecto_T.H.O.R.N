@@ -1,4 +1,4 @@
 # Herramientas de mantenimiento; no pertenecen al runtime de T.H.O.R.N.
 -r requirements.in
-pip-tools==7.6.1
+pip-tools==7.6.2
 pip-audit==2.10.1
