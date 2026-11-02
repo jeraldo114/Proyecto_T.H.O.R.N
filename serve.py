@@ -34,6 +34,8 @@ async def _serve(*, port: int, without_database: bool) -> None:
     application = await asyncio.to_thread(
         _load_application, without_database=without_database,
     )
+    # NOTA DEL OPERADOR: un worker posee el bus y las sesiones en RAM.
+    # Subir workers sin un coordinador separaria ese estado entre procesos.
     config = uvicorn.Config(
         app=application, host="127.0.0.1", port=port, lifespan="on",
         workers=1, loop="asyncio", log_config=None, access_log=False,

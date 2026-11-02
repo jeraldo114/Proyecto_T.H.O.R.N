@@ -14,6 +14,10 @@ class RepositorySecurityTests(unittest.TestCase):
             ".env", ".env.production", "core/.env", "credentials.env",
             ".venv/Scripts/python.exe", "logs/server.err.log", "backups/db.sql",
             "private.key", "certificate.pfx", "memory.sqlite3", "dump_thorn.sql",
+            "frontend/node_modules/package/index.js", "frontend/dist/hud.js",
+            ".artifacts/hud-desktop.png",
+            ".models/model.gguf", ".tools/ollama.exe", "build/application.exe",
+            'thorn-recovery.key', 'old-authority.dpapi', 'thorn-20261031.thornbak', 'THORN.exe',
         ):
             with self.subTest(path=path):
                 self.assertTrue(private_path(path))

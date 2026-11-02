@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import os
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 # Claves exclusivas de este proceso de pruebas; no se escribe el .env real.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "thorn_web.settings")
@@ -19,6 +20,7 @@ from django.urls import get_resolver
 
 from core.events import EventType, ThornEvent
 from core.runtime import RuntimeState, ThornRuntime
+from core.system_sensor import SystemSensor, SystemSnapshot
 from thorn_web.lifespan import ASGIMessage, ASGIScope, ThornASGI
 
 DJANGO_APP = get_asgi_application()
@@ -26,6 +28,35 @@ get_resolver().url_patterns
 
 
 class WebTests(unittest.IsolatedAsyncioTestCase):
+    async def test_hud_index_is_local_and_does_not_embed_token(self) -> None:
+        with patch("api.hud._read_asset", return_value=(b"<html>T.H.O.R.N</html>", "text/html")):
+            status, body, headers = await self.request("/")
+        self.assertEqual(status, 200)
+        self.assertNotIn(b"test-token", body)
+        self.assertIn(b"script-src 'self'", headers[b"content-security-policy"])
+        self.assertEqual(headers[b"x-frame-options"], b"DENY")
+
+    async def test_unknown_asset_fails_closed(self) -> None:
+        with patch("api.hud._read_asset", side_effect=FileNotFoundError):
+            status, body, _ = await self.request("/hud/assets/private.env")
+        self.assertEqual(status, 404)
+        self.assertEqual(json.loads(body)["error"], "hud_asset_unavailable")
+
+    async def test_activity_requires_token_and_excludes_event_payload(self) -> None:
+        status, _, _ = await self.request("/api/v1/activity/")
+        self.assertEqual(status, 401)
+        await self.runtime.bus.publish(ThornEvent(
+            EventType.COMMAND_RECEIVED, "test", {"private": "never-export-this"},
+        ))
+        await self.runtime.bus.join()
+        status, body, _ = await self.request("/api/v1/activity/", token="test-token")
+        data = json.loads(body)
+        self.assertEqual(status, 200)
+        self.assertFalse(data["durable"])
+        self.assertEqual(data["capacity"], 120)
+        self.assertTrue(any(item["event_type"] == "command.received" for item in data["events"]))
+        self.assertNotIn(b"never-export-this", body)
+
     async def asyncSetUp(self) -> None:
         overrides = override_settings(THORN_API_TOKEN="test-token", THORN_USE_DATABASE=False)
         overrides.enable()
@@ -51,16 +82,19 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         self, path: str, *, method: str = "GET", body: bytes = b"",
         token: str | None = None, content_type: str = "application/json",
         host: str = "127.0.0.1", chunks: list[bytes] | None = None,
+        query: str = "",
+        extra_headers: list[tuple[bytes, bytes]] | None = None,
         app: ThornASGI | None = None,
     ) -> tuple[int, bytes, dict[bytes, bytes]]:
         """Envia mensajes ASGI reales sin abrir sockets ni conectar a MySQL."""
         headers = [(b"host", host.encode()), (b"content-type", content_type.encode())]
         if token is not None:
             headers.append((b"authorization", f"Bearer {token}".encode()))
+        headers.extend(extra_headers or [])
         scope: ASGIScope = {
             "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
             "method": method, "path": path, "raw_path": path.encode(),
-            "query_string": b"", "scheme": "http", "headers": headers,
+            "query_string": query.encode(), "scheme": "http", "headers": headers,
             "server": ("127.0.0.1", 8000), "client": ("127.0.0.1", 50000),
         }
         communicator = ApplicationCommunicator(app or self.app, scope)
@@ -181,6 +215,45 @@ class WebTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(status, 503)
         self.assertEqual(json.loads(body)["error"], "bus_unavailable")
+
+    async def test_system_requires_authentication_even_without_sensor(self) -> None:
+        for token in (None, "wrong-token"):
+            status, _, headers = await self.request("/api/v1/system/", token=token)
+            self.assertEqual(status, 401)
+            self.assertEqual(headers[b"www-authenticate"], b"Bearer")
+        status, body, _ = await self.request("/api/v1/system/", token="test-token")
+        self.assertEqual(status, 503)
+        self.assertEqual(json.loads(body)["error"], "sensor_disabled")
+
+    async def test_system_uses_cache_without_reading_per_request(self) -> None:
+        sample = SystemSnapshot("2026-01-01T00:00:00+00:00", 10.0, 8, 1000, 800, 20.0, 2000, 1000, 50.0, 42)
+        reader = Mock(return_value=sample)
+        sensor = SystemSensor(self.runtime.bus, interval=60, reader=reader)
+        self.runtime.system_sensor = sensor
+        status, body, _ = await self.request("/api/v1/system/", token="test-token")
+        self.assertEqual(status, 503)
+        self.assertIsNone(json.loads(body)["snapshot"])
+        await sensor.start()
+        async with asyncio.timeout(2):
+            while sensor.snapshot is None:
+                await asyncio.sleep(0.005)
+        for _ in range(2):
+            status, body, headers = await self.request("/api/v1/system/", token="test-token")
+            self.assertEqual(status, 200)
+            self.assertEqual(json.loads(body)["snapshot"]["process_count"], 42)
+            self.assertEqual(headers[b"cache-control"], b"no-store")
+        reader.assert_called_once()
+        await sensor.stop()
+        status, body, _ = await self.request("/api/v1/system/", token="test-token")
+        self.assertEqual(status, 503)
+        self.assertFalse(json.loads(body)["sensor"]["fresh"])
+
+    async def test_snapshot_event_cannot_be_forged_from_api(self) -> None:
+        status, _, _ = await self.request(
+            "/api/v1/events/", method="POST", token="test-token",
+            body=b'{"event_type":"system.snapshot"}',
+        )
+        self.assertEqual(status, 400)
 
 
 class LifespanTests(unittest.IsolatedAsyncioTestCase):

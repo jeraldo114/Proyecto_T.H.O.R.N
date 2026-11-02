@@ -1,12 +1,45 @@
 """Asocia cada direccion HTTP con su funcion de respuesta asincrona."""
 
-from django.urls import path
+from django.urls import path, re_path
 
-from api import views
+from api import assistant, hud, views, sessions, operator
 
 urlpatterns = [
-    path("", views.health, name="home"),
+    path("", hud.index, name="home"),
+    re_path(r"^hud/assets/(?P<name>[A-Za-z0-9_.-]+)$", hud.asset, name="hud_asset"),
     path("api/v1/health/", views.health, name="health"),
+    path("api/v1/auth/session/", sessions.exchange, name="session_exchange"),
+    path("api/v1/auth/renew/", sessions.renew, name="session_renew"),
+    path("api/v1/auth/revoke/", sessions.revoke, name="session_revoke"),
     path("api/v1/status/", views.status, name="status"),
+    path("api/v1/system/", views.system, name="system"),
+    path("api/v1/activity/", views.activity, name="activity"),
     path("api/v1/events/", views.publish_event, name="publish_event"),
+    path("api/v1/capabilities/", assistant.capabilities, name="capabilities"),
+    path("api/v1/alerts/", assistant.alerts, name="alerts"),
+    path("api/v1/alerts/configure/", assistant.configure_alerts, name="configure_alerts"),
+    path("api/v1/history/", assistant.history, name="history"),
+    path("api/v1/actions/prepare/", assistant.prepare_action, name="prepare_action"),
+    path("api/v1/actions/confirm/", assistant.confirm_action, name="confirm_action"),
+    path("api/v1/chat/", assistant.chat, name="chat"),
+    path("api/v1/briefing/", operator.briefing, name="briefing"),
+    path("api/v1/workspace/", operator.workspace, name="workspace"),
+    path("api/v1/workspace/change/", operator.change_panel, name="change_panel"),
+    path("api/v1/conversation/cancel/", operator.cancel, name="cancel_conversation"),
+    path("api/v1/conversation/reset/", operator.reset, name="reset_conversation"),
+    path("api/v1/preferences/", operator.preferences, name="preferences"),
+    path("api/v1/preferences/save/", operator.save_preferences, name="save_preferences"),
+    path("api/v1/maps/lookup/", operator.map_lookup, name="map_lookup"),
+    path("api/v1/documents/upload/", operator.upload, name="upload_document"),
+    path("api/v1/documents/ask/", operator.ask_document, name="ask_document"),
+    path("api/v1/documents/<str:identity>/download/", operator.download, name="download_document"),
+    path("api/v1/network/", assistant.network_status, name="network"),
+    path("api/v1/network/diagnose/", assistant.network_diagnose, name="network_diagnose"),
+    path("api/v1/web/search/", assistant.web_search, name="web_search"),
+    path("api/v1/web/read/", assistant.web_read, name="web_read"),
+    path("api/v1/voice/speech/", assistant.speech, name="speech"),
+    path("api/v1/microphone/transcribe/", assistant.transcribe, name="transcribe"),
+    path("api/v1/memory/", assistant.memory, name="memory"),
+    path("api/v1/memory/save/", assistant.save_memory, name="save_memory"),
+    path("api/v1/memory/delete/", assistant.delete_memory, name="delete_memory"),
 ]

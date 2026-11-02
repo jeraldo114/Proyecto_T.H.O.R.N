@@ -1,1 +1,1 @@
-"""Componentes del nucleo local de T.H.O.R.N, version Bastion 8."""
+"""Componentes del nucleo local de T.H.O.R.N, version Bastion 9."""

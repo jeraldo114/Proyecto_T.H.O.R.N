@@ -18,6 +18,7 @@ class EventType(StrEnum):
     RUNTIME_STOPPING = "runtime.stopping"
     COMMAND_RECEIVED = "command.received"
     SYSTEM_ALERT = "system.alert"
+    SYSTEM_SNAPSHOT = "system.snapshot"
     MODULE_ERROR = "module.error"
 
 

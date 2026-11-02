@@ -1,0 +1,4 @@
+# Salida de voz LOCAL opcional, CPU; no instala extras de entrenamiento ni CUDA.
+-c requirements.txt
+-r requirements.in
+piper-tts==1.8.0

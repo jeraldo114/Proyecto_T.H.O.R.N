@@ -1,0 +1,4 @@
+# Dictado opcional local. No requiere ElevenLabs Speech to Text ni sounddevice.
+-c requirements.txt
+-r requirements.in
+vosk==0.3.45

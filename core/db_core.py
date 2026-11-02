@@ -1,4 +1,4 @@
-"""Nucleo asincrono de persistencia para T.H.O.R.N, version Bastion 8."""
+"""Nucleo asincrono de persistencia para T.H.O.R.N, version Bastion 9."""
 
 from __future__ import annotations
 
@@ -11,13 +11,22 @@ from typing import Any, AsyncIterator
 
 import aiomysql
 from dotenv import load_dotenv
+from .paths import data_root
 
 logger = logging.getLogger(__name__)
 
 # El proceso comparte conexiones; cada sesion toma una prestada temporalmente.
 _pool: aiomysql.Pool | None = None
 _pool_lock = asyncio.Lock()
-_env_path = Path(__file__).resolve().parents[1] / ".env"
+_env_path = data_root() / ".env"
+
+
+def _load_environment(allow_pending: bool = False) -> None:
+    """El acceso a archivos y DPAPI ocurre antes de abrir el pool, en un worker."""
+    from thorn_web.config import protected_environment
+    provided = set(os.environ)
+    load_dotenv(dotenv_path=_env_path)
+    protected_environment(_env_path.parent, provided, allow_pending=allow_pending)
 
 
 def _obtener_configuracion_mysql() -> dict[str, Any]:
@@ -36,15 +45,17 @@ def _obtener_configuracion_mysql() -> dict[str, Any]:
     }
 
 
-async def inicializar_motor_datos() -> aiomysql.Pool:
+async def inicializar_motor_datos(*, allow_pending: bool = False) -> aiomysql.Pool:
     """Inicializa y retorna el pool asincrono de conexiones MySQL."""
     global _pool
 
+    # NOTA DEL OPERADOR: si dos modulos arrancan juntos, este candado evita
+    # crear dos pools. Diez conexiones compartidas, cada una con su turno.
     async with _pool_lock:
         if _pool is not None and not _pool.closed:
             return _pool
         try:
-            await asyncio.to_thread(load_dotenv, dotenv_path=_env_path)
+            await asyncio.to_thread(_load_environment, allow_pending)
             _pool = await aiomysql.create_pool(**_obtener_configuracion_mysql())
             logger.info("Pool MySQL inicializado correctamente.")
             return _pool
@@ -94,8 +105,13 @@ async def db_session() -> AsyncIterator[tuple[aiomysql.Connection, aiomysql.Curs
     try:
         conn = await pool.acquire()
         cur = await conn.cursor()
+        # NOTA DEL OPERADOR: prestamos la conexion, no decidimos tu transaccion.
+        # Quien escribe confirma con await conn.commit(); al salir se revierte
+        # lo pendiente para que la siguiente sesion no herede trabajo ajeno.
         yield conn, cur
     except BaseException as error:
+        # Una cancelacion puede dejar una respuesta MySQL a medio leer.
+        # Esa conexion se descarta: devolverla sana vale mas que reutilizarla.
         if conn is not None:
             conn.close()
         if isinstance(error, Exception):

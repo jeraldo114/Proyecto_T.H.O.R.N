@@ -1,0 +1,3 @@
+# Herramienta de compilacion opcional; no pertenece al runtime ni entrena modelos.
+-c requirements.txt
+nuitka==4.3.3

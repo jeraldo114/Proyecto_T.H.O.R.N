@@ -17,6 +17,10 @@ __pycache__/
 htmlcov/
 build/
 dist/
+node_modules/
+.artifacts/
+.models/
+.tools/
 *.egg-info/
 
 # Datos locales, logs y respaldos no son codigo fuente.
@@ -44,6 +48,13 @@ backup*.sql
 *.jks
 *.keystore
 *.kdbx
+*.dpapi
+*.thornbak
+*.recovery
+*.exe
+*.dll
+*.pyd
+*.lnk
 
 # Archivos personales de Windows y editores.
 Thumbs.db

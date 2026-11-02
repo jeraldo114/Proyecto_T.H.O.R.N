@@ -1,0 +1,16 @@
+- module-name: 'piper'
+  data-files:
+    - dirs:
+        - 'espeak-ng-data'
+  implicit-imports:
+    - depends:
+        - 'piper.espeakbridge'
+
+- module-name: 'vosk'
+  dlls:
+    - from_filenames:
+        prefixes:
+          - 'libgcc_s_seh-1'
+          - 'libstdc++-6'
+          - 'libwinpthread-1'
+      when: 'win32'
