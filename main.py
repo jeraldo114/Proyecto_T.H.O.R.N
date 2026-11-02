@@ -14,12 +14,14 @@ from core.runtime import ThornRuntime
 logger = logging.getLogger("thorn")
 
 
-async def _main(*, demo: bool, use_database: bool) -> None:
+async def _main(*, demo: bool, use_database: bool, use_system_sensor: bool = True) -> None:
     """Supervisa el runtime; la demo valida el flujo sin ejecutar comandos OS."""
-    runtime = ThornRuntime(use_database=use_database)
+    runtime = ThornRuntime(use_database=use_database, use_system_sensor=use_system_sensor,
+                           enable_assistant_services=True)
 
     async def on_event(event: ThornEvent) -> None:
-        logger.info("Evento recibido: %s | origen=%s", event.event_type, event.source)
+        level = logging.DEBUG if event.event_type == EventType.SYSTEM_SNAPSHOT else logging.INFO
+        logger.log(level, "Evento recibido: %s | origen=%s", event.event_type, event.source)
 
     for event_type in EventType:
         runtime.bus.subscribe(event_type, on_event)
@@ -55,11 +57,15 @@ def main() -> int:
     parser.add_argument(
         "--sin-db", action="store_true", help="Ejecuta el bus sin conectar a MySQL.",
     )
+    parser.add_argument("--sin-sensor", action="store_true", help="Desactiva la telemetria local.")
     args = parser.parse_args()
 
     with queued_logging():
         try:
-            asyncio.run(_main(demo=args.demo, use_database=not args.sin_db))
+            asyncio.run(_main(
+                demo=args.demo, use_database=not args.sin_db,
+                use_system_sensor=not args.sin_sensor,
+            ))
             return 0
         except KeyboardInterrupt:
             logger.info("Cierre solicitado desde la consola.")

@@ -4,3 +4,7 @@ python-dotenv==1.2.4
 cryptography==50.0.2
 Django==5.2.17
 uvicorn==0.54.0
+psutil==7.2.2
+httpx==0.28.1
+httpcore==1.0.9
+pypdf==6.21.4

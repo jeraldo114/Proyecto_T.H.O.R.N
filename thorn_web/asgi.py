@@ -19,11 +19,17 @@ logger = logging.getLogger(__name__)
 
 def create_runtime() -> ThornRuntime:
     """Construye el runtime local y registra el receptor inicial de eventos."""
-    runtime = ThornRuntime(use_database=settings.THORN_USE_DATABASE)
+    runtime = ThornRuntime(
+        use_database=settings.THORN_USE_DATABASE,
+        use_system_sensor=settings.THORN_SYSTEM_SENSOR,
+        sensor_interval=settings.THORN_SENSOR_INTERVAL,
+        enable_assistant_services=True,
+    )
 
     async def record_event(event: ThornEvent) -> None:
         # Aceptar un evento aun no ejecuta acciones sobre Windows.
-        logger.info("Evento procesado: tema=%s id=%s", event.event_type, event.event_id)
+        level = logging.DEBUG if event.event_type == EventType.SYSTEM_SNAPSHOT else logging.INFO
+        logger.log(level, "Evento procesado: tema=%s id=%s", event.event_type, event.event_id)
 
     for event_type in EventType:
         runtime.bus.subscribe(event_type, record_event)

@@ -49,6 +49,8 @@ class EventBus:
             raise ValueError("La capacidad y el numero de workers deben ser positivos.")
         if not math.isfinite(handler_timeout) or handler_timeout <= 0:
             raise ValueError("El timeout debe ser positivo y finito.")
+        # NOTA DEL OPERADOR: la cola tiene techo para que una rafaga de eventos
+        # no se coma la RAM. Al llenarse, el productor espera sin frenar el loop.
         self._queue: asyncio.PriorityQueue[tuple[int, int, ThornEvent]] = (
             asyncio.PriorityQueue(maxsize=max_queue_size)
         )
@@ -174,6 +176,8 @@ class EventBus:
                 async with self._capacity:
                     self._capacity.notify_all()
                 for handler in tuple(self._subscribers.get(event.event_type, ())):
+                    # Un modulo lento tiene su plazo. Revisa las metricas de
+                    # errores antes de subirlo: alargarlo puede atascar el bus.
                     try:
                         async with asyncio.timeout(self._handler_timeout):
                             await handler(event)

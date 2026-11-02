@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import os
+from core.document_worker import MAX_PDF_BYTES
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = False
@@ -28,6 +30,15 @@ _database_flag = os.getenv("THORN_USE_DATABASE", "1").lower()
 if _database_flag not in {"1", "0", "true", "false"}:
     raise ValueError("THORN_USE_DATABASE debe ser 1, 0, true o false.")
 THORN_USE_DATABASE = _database_flag in {"1", "true"}
+_sensor_flag = os.getenv("THORN_SYSTEM_SENSOR", "1").lower()
+if _sensor_flag not in {"1", "0", "true", "false"}:
+    raise ValueError("THORN_SYSTEM_SENSOR debe ser 1, 0, true o false.")
+THORN_SYSTEM_SENSOR = _sensor_flag in {"1", "true"}
+THORN_SENSOR_INTERVAL = float(os.getenv("THORN_SENSOR_INTERVAL", "2"))
+if not math.isfinite(THORN_SENSOR_INTERVAL) or THORN_SENSOR_INTERVAL < 0.2:
+    raise ValueError("THORN_SENSOR_INTERVAL debe ser finito y >= 0.2 s.")
 THORN_MAX_REQUEST_BYTES = 16 * 1024
-DATA_UPLOAD_MAX_MEMORY_SIZE = THORN_MAX_REQUEST_BYTES
-FILE_UPLOAD_MAX_MEMORY_SIZE = THORN_MAX_REQUEST_BYTES
+# NOTA DEL OPERADOR: ASGI ya limita JSON a 16 KiB y autentica PDF/PCM antes
+# de recibirlos. Django no debe volcar esos buffers validados al disco del loop.
+DATA_UPLOAD_MAX_MEMORY_SIZE = MAX_PDF_BYTES
+FILE_UPLOAD_MAX_MEMORY_SIZE = MAX_PDF_BYTES + 1

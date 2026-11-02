@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09111d">
+  <title>T.H.O.R.N // Bastion 9</title>
+  <link rel="stylesheet" href="/hud/assets/hud.css">
+  <script type="module" src="/hud/assets/hud.js"></script>
+</head>
+<body class="hud-desktop" data-desktop-mode="presence" data-desktop-view="central">
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="T.H.O.R.N, centro de mando"><span class="brand-mark">T</span><span>T.H.O.R.N<small>BASTION 9</small></span></a>
+      <div class="sidebar-label">ESPACIO OPERATIVO</div>
+      <nav aria-label="Navegación principal">
+        <button class="nav-item active" data-view="central" aria-current="page"><i data-lucide="orbit"></i><span>Centro de mando</span><small>01</small></button>
+        <button class="nav-item" data-view="system"><i data-lucide="activity"></i><span>Sistema</span><small>02</small></button>
+        <button class="nav-item" data-view="activity"><i data-lucide="terminal"></i><span>Actividad</span><small>03</small></button>
+        <button class="nav-item" data-view="assistant" aria-label="Asistente"><i data-lucide="brain-circuit"></i><span>Asistente</span><small>04</small></button>
+        <button class="nav-item" data-view="history" aria-label="Historial"><i data-lucide="database"></i><span>Historial</span><small>05</small></button>
+        <button class="nav-item" data-view="network" aria-label="Red"><i data-lucide="globe"></i><span>Red</span><small>06</small></button>
+      </nav>
+      <div class="sidebar-label modules-label">CAPACIDADES</div>
+      <div class="capability"><i data-lucide="radio"></i><span>Telemetría</span><span id="cap-sensor" class="cap-state">—</span></div>
+      <div class="capability"><i data-lucide="database"></i><span>Persistencia</span><span id="cap-db" class="cap-state">—</span></div>
+      <div class="capability"><i data-lucide="brain-circuit"></i><span>Lenguaje</span><span id="cap-language" class="cap-state">—</span></div>
+      <div class="capability"><i data-lucide="volume-2"></i><span id="cap-voice-label">Voz / local</span><span id="cap-voice" class="cap-state">—</span></div>
+      <div class="capability"><i data-lucide="globe"></i><span>Red / Internet</span><span id="cap-network" class="cap-state">—</span></div>
+      <div class="capability"><i data-lucide="scan-eye"></i><span>Acciones OS</span><span id="cap-actions" class="cap-state">—</span></div>
+      <div class="sidebar-bottom">
+        <div class="local-node"><i data-lucide="monitor"></i><span>NODO LOCAL<small id="node-host">127.0.0.1</small></span><span class="node-dot"></span></div>
+        <button class="nav-item" id="settings-button"><i data-lucide="sliders-horizontal"></i><span>Preferencias</span></button>
+        <div class="build-label">T.H.O.R.N OS <span>B9 / LOCAL</span></div>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <div class="page-heading"><div class="eyebrow">INTERFAZ TÁCTICA <span>/</span> NODO PERSONAL</div><h1 id="page-title">Centro de mando<span class="title-dot">.</span></h1></div>
+        <div class="clock"><div class="clock-caption"><span class="status-dot"></span> HORA LOCAL <span id="timezone">—</span></div><time id="clock-time">--:--:--</time><div id="clock-date">—</div></div>
+        <div class="header-actions">
+          <button class="icon-button mobile-settings" id="mobile-settings-button" aria-label="Preferencias" data-tooltip="Preferencias"><i data-lucide="sliders-horizontal"></i></button>
+          <button class="icon-button" id="focus-button" aria-label="Modo enfoque" data-tooltip="Modo enfoque" aria-pressed="false"><i data-lucide="focus"></i></button>
+          <button class="icon-button" id="fullscreen-button" aria-label="Pantalla completa" data-tooltip="Pantalla completa"><i data-lucide="maximize"></i></button>
+          <button class="session-button" id="session-button"><i data-lucide="key-round"></i><span id="session-label">Conectar</span></button>
+        </div>
+      </header>
+
+      <div class="statusbar"><span id="connection-state" class="connection-state"><span class="status-dot"></span><span id="connection-label">ESTABLECIENDO ENLACE</span></span><span class="status-detail">NÚCLEO <b id="runtime-state">—</b></span><span class="status-detail">SESIÓN <b id="uptime">—</b></span><span class="status-detail latency">API <b id="api-latency">—</b></span><span class="statusbar-end"><i data-lucide="shield-check"></i> ACCESO LOCAL</span></div>
+
+      <main>
+        <div class="conversation-bar" id="conversation-bar" data-state="off">
+          <label><input type="checkbox" id="conversation-enabled" role="switch" disabled>Conversación</label>
+          <span id="conversation-state" role="status">Micrófono apagado</span>
+          <button class="icon-button small" id="conversation-stop" disabled aria-label="Detener conversación" data-tooltip="Detener conversación y cerrar micrófono"><i data-lucide="square"></i></button>
+        </div>
+        <div id="alert-banner" class="alert-banner" role="status" hidden></div>
+        <section class="detail-view view" id="view-network" hidden aria-label="Red e Internet">
+          <div class="section-title"><h2>RED LOCAL</h2><div class="voice-toolbar"><span id="network-fresh">SIN MUESTRA</span><button class="icon-button small" id="network-refresh" disabled aria-label="Actualizar red local" data-tooltip="Actualizar red local"><i data-lucide="refresh-cw"></i></button></div></div>
+          <div class="network-metrics"><div><span>SUBIDA</span><strong id="network-upload">—</strong></div><div><span>BAJADA</span><strong id="network-download">—</strong></div><div><span>PUERTA DE ENLACE / IPv4</span><strong id="network-gateway">—</strong></div></div>
+          <div id="network-interfaces" class="network-interfaces"></div><time id="network-time" class="network-time">—</time>
+          <div class="section-title"><h2>INTERNET / SOLO LECTURA</h2><span id="search-provider" class="live-label">SIN SESIÓN</span></div>
+          <label class="voice-consent"><input type="checkbox" id="internet-consent" disabled>Autorizo enviar consultas y URLs a las fuentes seleccionadas durante esta sesión. No se envían archivos, notas ni telemetría del equipo.</label>
+          <form id="web-form" class="web-form">
+            <fieldset class="web-modes"><legend class="sr-only">Operación web</legend><label><input type="radio" name="web-mode" value="search" checked><i data-lucide="search"></i>Buscar</label><label><input type="radio" name="web-mode" value="read"><i data-lucide="book-open"></i>Leer URL</label></fieldset>
+            <label id="web-input-label" for="web-input">Consulta</label><div class="web-query"><input id="web-input" type="text" maxlength="240" autocomplete="off" required><button class="icon-button" id="web-submit" type="submit" disabled aria-label="Consultar Internet" data-tooltip="Consultar Internet"><i data-lucide="arrow-up-right"></i></button><button class="icon-button" id="web-cancel" type="button" disabled aria-label="Cancelar consulta web" data-tooltip="Cancelar consulta web"><i data-lucide="square"></i></button></div>
+          </form>
+          <div class="network-probe"><button class="command-button" id="network-diagnose" disabled><i data-lucide="activity"></i>Probar conexión HTTPS</button><span id="network-probe-result" role="status">SIN PRUEBA EXTERNA</span></div>
+          <p id="web-result" class="operation-result" role="status"></p><ul id="web-sources" class="web-sources" hidden></ul>
+        </section>
+        <section class="dashboard view" id="view-central" aria-label="Centro de mando">
+          <div class="telemetry-column">
+            <div class="section-title"><h2><span>01</span> TELEMETRÍA</h2><button class="icon-button small" id="refresh-button" aria-label="Actualizar datos" data-tooltip="Actualizar datos"><i data-lucide="refresh-cw"></i></button></div>
+            <div class="metric" data-metric="cpu"><div class="metric-heading"><span><i data-lucide="cpu"></i> PROCESADOR</span><strong id="cpu-value">—<small>%</small></strong></div><div class="meter"><div id="cpu-bar"></div></div><canvas id="cpu-chart" class="sparkline" aria-label="Historial observado de CPU"></canvas><div class="metric-foot"><span id="cpu-detail">Sin muestra</span><span class="metric-key">CPU</span></div></div>
+            <div class="metric" data-metric="memory"><div class="metric-heading"><span><i data-lucide="memory-stick"></i> MEMORIA</span><strong id="memory-value">—<small>%</small></strong></div><div class="meter"><div id="memory-bar"></div></div><canvas id="memory-chart" class="sparkline" aria-label="Historial observado de RAM"></canvas><div class="metric-foot"><span id="memory-detail">Sin muestra</span><span class="metric-key">RAM</span></div></div>
+            <div class="metric" data-metric="disk"><div class="metric-heading"><span><i data-lucide="hard-drive"></i> ALMACENAMIENTO</span><strong id="disk-value">—<small>%</small></strong></div><div class="meter"><div id="disk-bar"></div></div><div class="metric-foot"><span id="disk-detail">Sin muestra</span><span class="metric-key">DISCO</span></div></div>
+            <div class="system-totals"><div><span>PROCESOS</span><strong id="process-count">—</strong></div><div><span>MUESTRAS</span><strong id="sample-count">—</strong></div></div>
+            <div class="sample-status"><span class="status-dot" id="sample-dot"></span><span id="sample-state">TELEMETRÍA BLOQUEADA</span><time id="sample-time">—</time></div>
+          </div>
+
+          <div class="core-column">
+            <div class="core-topline"><span><span class="tiny-square"></span> CORE / BASTION 9</span><span id="core-link">ESPERANDO NÚCLEO</span></div>
+            <div class="core-scene" id="core-scene"><canvas id="core-canvas" aria-label="Núcleo tridimensional interactivo de T.H.O.R.N"></canvas><span class="scene-coordinate left">TH / 08</span><span class="scene-coordinate right">LOCAL</span><div class="core-caption"><div id="core-caption-state">SIN ENLACE</div><strong>T.H.O.R.N</strong><span id="core-caption-detail">SUPERVISOR ASÍNCRONO</span></div><p id="webgl-fallback" hidden>Visualización 3D no disponible</p></div>
+            <div class="core-controls"><button class="command-button" id="diagnostic-button"><i data-lucide="scan-line"></i><span>Diagnóstico</span></button><button class="command-button" id="report-button"><i data-lucide="download"></i><span>Informe</span></button><button class="icon-button" id="animation-button" aria-label="Pausar animación" data-tooltip="Pausar animación" aria-pressed="false"><i data-lucide="pause"></i></button></div>
+            <div class="bus-panel"><div class="section-title"><h2><span>02</span> BUS DE EVENTOS</h2><span id="bus-live" class="live-label">—</span></div><div class="bus-counters"><div><span>PUBLICADOS</span><strong id="events-published">—</strong></div><div><span>PROCESADOS</span><strong id="events-processed">—</strong></div><div><span>EN COLA</span><strong id="events-queued">—</strong></div><div><span>ERRORES</span><strong id="events-errors">—</strong></div></div><div class="bus-footer"><span><i data-lucide="workflow"></i><b id="workers">—</b> consumidores</span><span id="queue-state">Sin lectura</span></div></div>
+          </div>
+
+          <div class="activity-column"><div class="section-title"><h2><span>03</span> ACTIVIDAD</h2><button class="icon-button small" id="pause-button" aria-label="Pausar actualización" data-tooltip="Pausar actualización" aria-pressed="false"><i data-lucide="pause"></i></button></div><div class="activity-toolbar"><span><span class="status-dot"></span><b id="activity-mode">EN VIVO</b></span><select id="activity-filter" aria-label="Filtrar actividad"><option value="all">Todos</option><option value="runtime">Núcleo</option><option value="sensor">Sensor</option><option value="error">Errores</option><option value="command">Comandos</option></select></div><ol id="activity-list" class="activity-list"><li class="empty-state"><i data-lucide="lock-keyhole"></i><span>Sesión privada desconectada</span></li></ol><div class="activity-bottom"><span>MEMORIA VOLÁTIL</span><button class="text-button" id="all-activity-button">Ver registro<i data-lucide="arrow-up-right"></i></button></div></div>
+        </section>
+
+        <section class="detail-view view" id="view-system" hidden><div class="section-title"><h2>ESTADO DEL EQUIPO</h2><span id="system-fresh-label">SIN MUESTRA</span></div><div id="system-table" class="data-table"></div><div class="detail-bottom"><button class="command-button" id="system-report-button"><i data-lucide="download"></i>Exportar informe</button><span id="system-timestamp">—</span></div></section>
+        <section class="detail-view view" id="view-activity" hidden><div class="section-title"><h2>REGISTRO DE ACTIVIDAD</h2><button class="icon-button small" id="export-events-button" aria-label="Exportar actividad" data-tooltip="Exportar actividad"><i data-lucide="download"></i></button></div><div class="event-table-header"><span>HORA</span><span>EVENTO</span><span>ORIGEN</span><span>IDENTIFICADOR</span></div><div id="event-table" class="event-table"><p class="empty-state">Sin eventos observados</p></div></section>
+        <section class="detail-view view" id="view-assistant" hidden>
+          <div class="section-title"><h2>ASISTENTE LOCAL</h2><span id="model-state">SIN SESIÓN</span></div>
+          <div class="assistant-status"><div><span>MODELO</span><strong id="model-name">—</strong></div><div><span>AUDITORÍA</span><strong id="audit-state">—</strong></div><div><span id="voice-service-label">VOZ / LOCAL</span><strong id="voice-state">—</strong></div></div>
+          <p id="ai-policy" class="operation-result" role="status"></p>
+          <div class="section-title"><h2>IDENTIDAD VOCAL</h2><span class="live-label">ES / LATINO</span></div>
+          <form id="voice-form" class="voice-form">
+            <label class="voice-consent"><input type="checkbox" id="voice-consent">Autorizo enviar a ElevenLabs los textos que elija reproducir, incluidas las nuevas respuestas si activo su lectura automática, y consumir créditos durante esta sesión.</label>
+            <label class="voice-consent"><input type="checkbox" id="voice-auto" disabled>Leer nuevas respuestas automáticamente</label>
+            <div class="voice-output-settings"><label for="voice-volume">Volumen</label><input id="voice-volume" type="range" min="0" max="100" step="5" value="100"><output id="voice-volume-value" for="voice-volume">100 %</output><button class="icon-button" type="button" id="speaker-test-button" aria-label="Comprobar altavoces sin ElevenLabs" data-tooltip="Comprobar altavoces / tono local"><i data-lucide="volume-2"></i></button></div>
+            <label for="voice-text">Texto de prueba</label>
+            <textarea id="voice-text" rows="3" maxlength="2000" required>Soy T.H.O.R.N. Esta es una prueba de voz, no un informe del equipo. Trabajaremos con datos verificables. La precisión suele ser más útil que el entusiasmo.</textarea>
+            <div class="voice-toolbar"><button class="command-button" type="submit" id="voice-test-button" disabled><i data-lucide="volume-2"></i>Probar voz</button><button class="icon-button" type="button" id="voice-resume-button" hidden aria-label="Reproducir audio recibido" data-tooltip="Reproducir audio recibido / sin otra síntesis"><i data-lucide="play"></i></button><button class="icon-button" type="button" id="voice-stop-button" disabled aria-label="Detener voz" data-tooltip="Detener voz"><i data-lucide="square"></i></button><span id="voice-model">—</span></div>
+            <p id="voice-result" class="operation-result" role="status"></p>
+          </form>
+          <div class="section-title"><h2>ENTRADA / MICRÓFONO</h2><span id="microphone-engine">SIN SESIÓN</span></div>
+          <div class="microphone-panel">
+            <label for="microphone-device">Dispositivo de entrada</label>
+            <select id="microphone-device"><option value="">Micrófono predeterminado</option></select>
+            <div class="microphone-toolbar">
+              <button class="icon-button" id="microphone-start" disabled aria-label="Iniciar dictado local" data-tooltip="Iniciar dictado local"><i data-lucide="mic"></i></button>
+              <button class="icon-button" id="microphone-finish" disabled aria-label="Terminar y transcribir" data-tooltip="Terminar y transcribir"><i data-lucide="square"></i></button>
+              <button class="icon-button" id="microphone-cancel" disabled aria-label="Cancelar dictado" data-tooltip="Cancelar dictado"><i data-lucide="x"></i></button>
+              <meter id="microphone-level" min="0" max="1" value="0" aria-label="Nivel del micrófono"></meter>
+              <time id="microphone-time">0.0 / 15 s</time>
+            </div>
+            <p id="microphone-result" class="operation-result" role="status">Micrófono apagado</p>
+            <form id="microphone-form">
+              <label for="microphone-text">Transcripción</label>
+              <textarea id="microphone-text" rows="3" maxlength="2000" required></textarea>
+              <button class="command-button" id="microphone-send" type="submit" disabled><i data-lucide="arrow-up"></i>Consultar</button>
+            </form>
+          </div>
+          <div class="section-title"><h2>ACCIONES WINDOWS</h2></div>
+          <div class="action-toolbar"><label class="sr-only" for="action-select">Acción</label><select id="action-select" disabled><option>Sin acciones disponibles</option></select><button class="command-button" id="prepare-action-button" disabled><i data-lucide="shield-check"></i>Preparar</button></div>
+          <p id="action-result" class="operation-result" role="status"></p>
+          <div class="section-title"><h2>ALERTAS DEL SISTEMA</h2><span id="alert-state">—</span></div>
+          <div id="active-alerts" class="active-alerts"></div>
+          <form id="alert-form"><div class="rule-header"><span>RECURSO</span><span>LÍMITE %</span><span>RECUP. %</span><span>ESPERA S</span><span>ACTIVA</span></div><div id="alert-rules"></div><div class="detail-bottom"><button class="command-button" id="save-alerts-button" type="submit" disabled><i data-lucide="shield-check"></i>Guardar reglas</button><span id="alert-save-state"></span></div></form>
+        </section>
+        <section class="detail-view view" id="view-history" hidden>
+          <div class="section-title"><h2>MEMORIA EXPLÍCITA</h2><span id="memory-count">—</span></div>
+          <form id="memory-form"><label for="memory-input">Nota o preferencia</label><textarea id="memory-input" maxlength="1000" rows="2" required></textarea><button class="command-button" type="submit"><i data-lucide="database"></i>Guardar nota</button></form>
+          <p id="memory-state" class="operation-result" role="status"></p><div id="memory-list"></div>
+          <div class="section-title"><h2>HISTORIAL PERSISTENTE</h2><button class="icon-button" id="refresh-history-button" aria-label="Actualizar historial" data-tooltip="Actualizar historial"><i data-lucide="refresh-cw"></i></button></div>
+          <div id="history-table" class="history-table"><p class="empty-state">Sesión privada desconectada</p></div>
+          <button class="command-button" id="more-history-button" hidden><i data-lucide="arrow-up-right"></i>Anteriores</button>
+        </section>
+      </main>
+
+      <section class="console" aria-label="Consola de consultas"><div class="console-label"><i data-lucide="terminal"></i><span>CONSOLA LOCAL</span></div><button class="icon-button" id="console-microphone" disabled aria-label="Dictar consulta local" data-tooltip="Dictar consulta local"><i data-lucide="mic"></i></button><form id="command-form"><label class="sr-only" for="command-input">Consulta</label><input id="command-input" name="command" autocomplete="off" placeholder="Consultar al núcleo…" maxlength="2000"><button class="icon-button" type="submit" aria-label="Enviar consulta" data-tooltip="Enviar consulta"><i data-lucide="arrow-up"></i></button></form><button class="icon-button" id="console-toggle" aria-label="Abrir respuesta" data-tooltip="Abrir respuesta" aria-expanded="false"><i data-lucide="chevron-up"></i></button></section>
+      <div class="console-output" id="console-output" hidden><div class="section-title"><h2>RESPUESTA DEL NÚCLEO</h2><div class="voice-toolbar"><button class="icon-button small" id="speak-reply-button" disabled aria-label="Leer respuesta con ElevenLabs" data-tooltip="Leer respuesta con ElevenLabs"><i data-lucide="volume-2"></i></button><button class="icon-button small" id="resume-reply-button" hidden aria-label="Reproducir audio recibido" data-tooltip="Reproducir audio recibido / sin otra síntesis"><i data-lucide="play"></i></button><button class="icon-button small" id="stop-reply-button" disabled aria-label="Detener lectura" data-tooltip="Detener lectura"><i data-lucide="square"></i></button><button class="icon-button small" id="close-console" aria-label="Cerrar respuesta" data-tooltip="Cerrar respuesta"><i data-lucide="x"></i></button></div></div><pre id="console-text">Sin consulta</pre><p id="reply-voice-result" class="operation-result" role="status"></p><button class="command-button" id="suggested-action-button" hidden><i data-lucide="shield-check"></i><span>Revisar propuesta</span></button></div>
+      <footer class="footer"><span><span class="status-dot"></span> BASTION 9 <span class="footer-separator">/</span> <span id="footer-mode">LECTURA LOCAL</span></span><span id="footer-sync">SINCRONIZANDO</span><span>T.H.O.R.N OS <b>v0.9</b></span></footer>
+    </div>
+  </div>
+
+  <dialog id="session-dialog"><form id="session-form"><div class="dialog-heading"><i data-lucide="key-round"></i><h2>Sesión local</h2><button class="icon-button" type="button" id="close-session" aria-label="Cerrar sesión de conexión" data-tooltip="Cerrar"><i data-lucide="x"></i></button></div><label for="token-input">Token de acceso</label><input id="token-input" type="password" autocomplete="off" spellcheck="false" required maxlength="512"><p id="session-error" class="form-error" role="alert"></p><div class="dialog-actions"><button class="text-button" type="button" id="disconnect-button">Desconectar</button><button class="primary-button" type="submit"><i data-lucide="plug-zap"></i>Conectar</button></div></form></dialog>
+  <dialog id="settings-dialog"><div class="dialog-heading"><i data-lucide="sliders-horizontal"></i><h2>Preferencias</h2><button class="icon-button" id="close-settings" aria-label="Cerrar preferencias" data-tooltip="Cerrar"><i data-lucide="x"></i></button></div><label class="setting-row" for="poll-interval">Actualización<select id="poll-interval"><option value="2000">2 segundos</option><option value="5000">5 segundos</option><option value="10000">10 segundos</option></select></label><label class="setting-row" for="animation-setting">Animación del núcleo<input type="checkbox" id="animation-setting" checked></label><label class="setting-row" for="motion-setting">Reducir movimiento<input type="checkbox" id="motion-setting"></label><div class="setting-row"><span>Zona horaria</span><span id="settings-timezone">—</span></div></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <dialog id="action-dialog"><div class="dialog-heading"><i data-lucide="shield-check"></i><h2>Confirmar acción</h2></div><p id="action-confirm-label"></p><p id="action-expiry" class="operation-result"></p><div class="dialog-actions"><button class="text-button" id="cancel-action-button">Cancelar</button><button class="primary-button" id="confirm-action-button"><i data-lucide="arrow-up-right"></i>Confirmar y abrir</button></div></dialog>
+</body>
+</html>

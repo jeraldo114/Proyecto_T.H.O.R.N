@@ -11,6 +11,61 @@ from core.runtime import RuntimeState, ThornRuntime
 
 
 class RuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_activity_is_bounded_copied_and_excludes_payloads(self) -> None:
+        runtime = ThornRuntime(use_database=False)
+        async with runtime:
+            for _ in range(130):
+                await runtime.bus.publish(ThornEvent(
+                    EventType.COMMAND_RECEIVED, "test", {"private": "not-for-hud"},
+                ))
+            await runtime.bus.join()
+            self.assertEqual(len(runtime.activity), 120)
+            self.assertNotIn("not-for-hud", str(runtime.activity))
+            copy = runtime.activity
+            copy[0]["source"] = "changed"
+            self.assertEqual(runtime.activity[0]["source"], "test")
+            self.assertGreater(runtime.uptime_seconds, 0)
+
+    async def test_sensor_stops_before_shutdown_event_and_database(self) -> None:
+        order: list[str] = []
+        runtime = ThornRuntime(use_system_sensor=True)
+        initialize = AsyncMock()
+
+        async def stop_sensor() -> None:
+            order.append("sensor.stopped")
+
+        async def handler(event: ThornEvent) -> None:
+            order.append("bus.stopping")
+
+        async def close() -> None:
+            order.append("db.closed")
+
+        runtime.bus.subscribe(EventType.RUNTIME_STOPPING, handler)
+        with (
+            patch("core.runtime._load_database_hooks", return_value=(initialize, close)),
+            patch.object(runtime.system_sensor, "start", new=AsyncMock()),
+            patch.object(runtime.system_sensor, "stop", new=stop_sensor),
+        ):
+            async with runtime:
+                pass
+        self.assertEqual(order, ["sensor.stopped", "bus.stopping", "db.closed"])
+
+    async def test_sensor_start_failure_closes_every_resource(self) -> None:
+        runtime = ThornRuntime(use_system_sensor=True)
+        initialize, close, stop_sensor = AsyncMock(), AsyncMock(), AsyncMock()
+        with (
+            patch("core.runtime._load_database_hooks", return_value=(initialize, close)),
+            patch.object(runtime.system_sensor, "start", new=AsyncMock(side_effect=OSError("expected"))),
+            patch.object(runtime.system_sensor, "stop", new=stop_sensor),
+            self.assertLogs("core.runtime", level="ERROR"),
+        ):
+            with self.assertRaises(OSError):
+                await runtime.start()
+        stop_sensor.assert_awaited_once()
+        close.assert_awaited_once()
+        self.assertEqual(runtime.state, RuntimeState.FAILED)
+        self.assertEqual(runtime.bus.stats.workers, 0)
+
     async def test_context_emits_lifecycle_and_closes(self) -> None:
         runtime = ThornRuntime(use_database=False)
         seen: list[str] = []

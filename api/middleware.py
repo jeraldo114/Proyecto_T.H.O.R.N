@@ -20,6 +20,8 @@ def local_host_middleware(get_response: AsyncResponse) -> AsyncResponse:
         except DisallowedHost:
             return JsonResponse({"error": "invalid_host"}, status=400)
         response = await get_response(request)
+        # NOTA DEL OPERADOR: las respuestas privadas no se quedan en cache.
+        # Validar el Host ayuda al acceso local; los permisos van por separado.
         response["Cache-Control"] = "no-store"
         response["X-Content-Type-Options"] = "nosniff"
         return response

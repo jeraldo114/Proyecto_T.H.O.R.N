@@ -8,6 +8,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.runtime import ThornRuntime
+from core.speech_input import MAX_PCM_BYTES, TRANSCRIBE_PATH
+from core.sessions import authorize
+from core.documents import UPLOAD_PATH
+from core.document_worker import MAX_PDF_BYTES
 
 logger = logging.getLogger(__name__)
 ASGIMessage = dict[str, Any]
@@ -34,6 +38,7 @@ class ThornASGI:
         self._runtime_factory = runtime_factory
         self._max_request_bytes = max_request_bytes
         self._runtime: ThornRuntime | None = None
+        self._document_busy = False
 
     async def __call__(self, scope: ASGIScope, receive: Receive, send: Send) -> None:
         if scope["type"] == "lifespan":
@@ -46,7 +51,37 @@ class ThornASGI:
             raise ValueError("Tipo de scope ASGI no soportado.")
 
     async def _http(self, scope: ASGIScope, receive: Receive, send: Send) -> None:
-        """Recibe hasta 16 KiB en memoria antes de crear los buffers de Django."""
+        """Autoriza y limita antes de reservar buffers; solo recibe un PDF a la vez."""
+        limit = self._max_request_bytes
+        is_document = scope.get("path") == UPLOAD_PATH and scope.get("method") == "POST"
+        if scope.get("path") in {TRANSCRIBE_PATH, UPLOAD_PATH} and scope.get("method") == "POST":
+            # NOTA DEL OPERADOR: autenticamos antes de reservar espacio para audio.
+            # Un clip permitido tiene un limite distinto al de una peticion JSON.
+            # No se amplian otros contratos ni se reciben clips sin autenticar.
+            from django.conf import settings
+            code = authorize(scope.get("headers", []), root=settings.THORN_API_TOKEN,
+                authority=self._runtime.sessions if self._runtime else None, path=scope["path"], method="POST")
+            if code is not None:
+                await send({"type": "http.response.start", "status": code,
+                            "headers": [(b"content-type", b"application/json")]})
+                await send({"type": "http.response.body", "body": json.dumps({"error": "insufficient_scope" if code == 403 else "unauthorized"}).encode()})
+                return
+            limit = MAX_PCM_BYTES if scope["path"] == TRANSCRIBE_PATH else MAX_PDF_BYTES
+        if is_document and self._document_busy:
+            await send({"type": "http.response.start", "status": 503,
+                        "headers": [(b"content-type", b"application/json")]})
+            await send({"type": "http.response.body", "body": b'{"error":"document_busy"}'})
+            return
+        if is_document:
+            self._document_busy = True
+        try:
+            await self._buffered_http(scope, receive, send, limit)
+        finally:
+            if is_document:
+                self._document_busy = False
+
+    async def _buffered_http(self, scope: ASGIScope, receive: Receive, send: Send, limit: int) -> None:
+        """Reproduce un cuerpo acotado sin archivos temporales ni lectura de disco."""
         body_buffer = bytearray()
         while True:
             message = await receive()
@@ -56,7 +91,7 @@ class ThornASGI:
                 raise ValueError("Mensaje ASGI HTTP inesperado.")
             chunk = message.get("body", b"")
             # Se cuentan bytes reales: Content-Length no es una fuente confiable.
-            if len(body_buffer) + len(chunk) > self._max_request_bytes:
+            if len(body_buffer) + len(chunk) > limit:
                 body = json.dumps({"error": "request_too_large"}).encode("utf-8")
                 await send({
                     "type": "http.response.start", "status": 413,
@@ -89,6 +124,8 @@ class ThornASGI:
                 message = await receive()
                 if message["type"] == "lifespan.startup":
                     try:
+                        # El HUD recibe servicio cuando el nucleo completo esta
+                        # listo; no anunciamos disponibilidad a mitad del arranque.
                         self._runtime = self._runtime_factory()
                         await self._runtime.start()
                     except Exception:

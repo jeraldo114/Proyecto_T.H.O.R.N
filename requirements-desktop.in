@@ -1,0 +1,5 @@
+# Ventana nativa y bandeja, independientes del servidor y de CI sin GUI.
+-r requirements.in
+pywebview==6.2.1
+pystray==0.19.5
+Pillow==13.0.0
