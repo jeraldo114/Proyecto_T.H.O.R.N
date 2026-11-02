@@ -97,7 +97,9 @@ Se utiliza [Tesseract.js](https://github.com/naptha/tesseract.js/blob/master/doc
 con español, worker y WASM locales, sin CDN. Se carga al pedirlo y se reutiliza
 un único worker; se libera tras 15 segundos inactivo. Cancelar, cerrar o minimizar
 el visor interrumpe la operación. La página se representa con un límite de
-2,4 millones de píxeles y la operación tiene un plazo de 45 segundos.
+2,4 millones de píxeles y la operación tiene un plazo de 45 segundos. El visor
+admite imágenes de origen de hasta 12 MP para cubrir escaneos habituales de
+300 dpi sin dejar que crezcan indefinidamente.
 
 Se adjuntan hasta 3.000 caracteres por página y 6.000 por documento. El original
 no se modifica ni se conserva al cerrar la sesión. El OCR puede sustituir la
@@ -123,6 +125,6 @@ estos límites no son un benchmark del F15.
 Se añadieron pruebas de cifrado, búsquedas, recuperación entre instancias,
 permisos, borrado con respuestas pendientes, nombre de activación, OCR y gestos.
 También se probó con MySQL real en una base temporal: cierre y reapertura del
-pool, recuperación de un turno antiguo, restauración y borrado. La prueba de
+pool, recuperación de un turno antiguo, respuesta con Ollama real, restauración y borrado. La prueba de
 navegador reconoce un PDF de imagen real y comprueba que no haya solicitudes
 externas. Ninguna prueba abre tu cámara o micrófono físicos ni compra síntesis.

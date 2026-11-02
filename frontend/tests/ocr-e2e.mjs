@@ -41,12 +41,12 @@ try {
   session = protectSecret((await (await exchange).json()).access_token);
   await page.waitForFunction(() => document.querySelector('#session-label').textContent === 'Conectado');
   const rgb = await page.evaluate(() => {
-    const canvas = document.createElement('canvas'); canvas.width = 700; canvas.height = 230;
-    const ctx = canvas.getContext('2d'); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 700, 230);
+    const canvas = document.createElement('canvas'); canvas.width = 4200; canvas.height = 1380;
+    const ctx = canvas.getContext('2d'); ctx.scale(6, 6); ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 700, 230);
     ctx.fillStyle = 'black'; ctx.font = '32px Arial'; ctx.fillText('THORN MEMORIA LOCAL', 24, 65);
     ctx.fillText('El fusible F9 protege el equipo.', 24, 125);
-    const pixels = ctx.getImageData(0, 0, 700, 230).data;
-    const bytes = new Uint8Array(700 * 230 * 3);
+    const pixels = ctx.getImageData(0, 0, 4200, 1380).data;
+    const bytes = new Uint8Array(4200 * 1380 * 3);
     for (let i = 0, j = 0; i < pixels.length; i += 4) { bytes[j++] = pixels[i]; bytes[j++] = pixels[i+1]; bytes[j++] = pixels[i+2]; }
     let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte); return btoa(binary);
   });
@@ -56,7 +56,7 @@ try {
     Buffer.from('<< /Type /Catalog /Pages 2 0 R >>'),
     Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>'),
     Buffer.from('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 700 230] /Resources << /XObject << /Im1 4 0 R >> >> /Contents 5 0 R >>'),
-    Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 700 /Height 230 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`), image, Buffer.from('\nendstream')]),
+    Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 4200 /Height 1380 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /FlateDecode /Length ${image.length} >>\nstream\n`), image, Buffer.from('\nendstream')]),
     Buffer.from(`<< /Length ${paint.length} >>\nstream\n${paint}\nendstream`),
   ];
   const chunks = [Buffer.from('%PDF-1.4\n')], offsets = [0]; let length = chunks[0].length;

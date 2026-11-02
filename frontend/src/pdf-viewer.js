@@ -121,7 +121,9 @@ export function createPdfViewer(root, { id, credential, active, onError, onOcr }
       if (data.byteLength > 8 * 1024 * 1024) throw new Error('document_size_limit');
       loading = getDocument({ data, isEvalSupported: false, enableXfa: false,
         cMapUrl: '/hud/assets/', cMapPacked: true, standardFontDataUrl: '/hud/assets/',
-        wasmUrl: '/hud/assets/', maxImageSize: 4 * 1024 * 1024, canvasMaxAreaInBytes: 16 * 1024 * 1024,
+        // Un escaneo A4 de 300 dpi suele superar 4 MP. Admitimos hasta 12 MP
+        // de origen; el canvas y la entrada OCR conservan sus propios límites.
+        wasmUrl: '/hud/assets/', maxImageSize: 12 * 1024 * 1024, canvasMaxAreaInBytes: 16 * 1024 * 1024,
         useSystemFonts: true, useWorkerFetch: true });
       const limit = setTimeout(() => { if (!pdf) { void release(); message.textContent = 'El visor superó el tiempo de carga.'; } }, 15000);
       try { pdf = await loading.promise; } finally { clearTimeout(limit); }

@@ -49,7 +49,8 @@ Al subir un PDF aparecen su representacion grafica, paginas, zoom, texto,
 consulta y descarga. PDF.js se carga al necesitarlo, desde recursos locales,
 con workers de lectura y renderizado. No se ejecutan scripts ni acciones del
 documento. El canvas esta limitado a 2048 pixeles por lado y las imagenes del
-visor a cuatro megapixeles. Una pagina incompatible informa el fallo y conserva
+visor a doce megapíxeles de origen. El OCR usa un canvas de hasta 2,4 MP.
+Una pagina incompatible informa el fallo y conserva
 el acceso al texto y al original.
 
 El parser del backend sigue aislado y aplica los limites documentados en

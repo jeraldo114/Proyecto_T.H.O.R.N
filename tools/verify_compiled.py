@@ -59,6 +59,13 @@ async def check_api(url: str) -> dict[str, object]:
                 raise ValueError('compiled_version_mismatch')
             if not caps['storage']['encrypted'] or caps['voice']['state'] != 'ready' or caps['microphone']['state'] != 'ready' or not caps['language']['available']:
                 raise ValueError('compiled_capabilities_incomplete')
+            if caps['operator']['memory']['state'] != 'disabled' or caps['operator']['memory']['retention'] != 'until_deleted':
+                raise ValueError('compiled_conversation_module_missing')
+            for asset in ('ocr.js', 'pdf-viewer.js', 'spa.traineddata.gz'):
+                response = await client.get('/hud/assets/' + asset); response.raise_for_status()
+                expected = await asyncio.to_thread((ROOT / 'frontend/dist' / asset).read_bytes)
+                if hashlib.sha256(response.content).digest() != hashlib.sha256(expected).digest():
+                    raise ValueError('compiled_ocr_assets_mismatch')
             voice = await client.post('/api/v1/voice/speech/', headers=headers,
                 json={'text': 'Verificación de voz local. Estoy listo para continuar.', 'cloud_consent': False})
             voice.raise_for_status()
@@ -96,6 +103,7 @@ async def check_api(url: str) -> dict[str, object]:
             return {'compiled': True, 'encrypted_storage': True, 'voice_bytes': len(voice.content),
                 'stt': 'local_real_audio', 'model': caps['language']['model'], 'release': RELEASE,
                 'pdf_text': True, 'context_follow_up': True,
+                'local_ocr_assets': True, 'conversation_module': True,
                 'chat_ms': round((time.monotonic() - start) * 1000), 'health_ms': health_ms}
         finally:
             if note_id:
