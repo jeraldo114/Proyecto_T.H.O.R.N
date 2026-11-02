@@ -202,9 +202,9 @@ Si no lo oyes, revisa si la pestana esta silenciada, el volumen del navegador
 en el mezclador de Windows y el dispositivo de salida seleccionado. "Tono local
 finalizado" no certifica que el altavoz fisico emitio sonido.
 La entrada de microfono es un modulo LOCAL separado: no envia audio a ElevenLabs.
-Admite dictado manual o conversacion por turnos con Silero; no tiene palabra de
-activacion. Reabre entrada solo despues de terminar la salida autorizada, con
-pausa de 400 ms para reducir eco. El nucleo 3D sigue el RMS del MP3 real, no una
+Admite dictado manual o conversacion por turnos con Silero y filtro local de
+activación por «Thorn». Reabre entrada solo despues de terminar la salida autorizada, con
+pausa de 250 ms para reducir eco. El nucleo 3D sigue el RMS del MP3 real, no una
 pulsacion decorativa. Ver [Microfono](MICROFONO_LOCAL.md).
 Desconectar borra consentimiento, lectura automatica, texto de prueba y audio.
 

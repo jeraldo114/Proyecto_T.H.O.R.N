@@ -21,6 +21,7 @@ from .network_sensor import NetworkSensor
 from .local_voice import LocalVoice
 from .operator import OperatorServices
 from .version import MODEL_PROFILE
+from .conversation_memory import ConversationMemory
 
 if TYPE_CHECKING:
     from .runtime import ThornRuntime
@@ -32,6 +33,7 @@ class AssistantServices:
     def __init__(self, runtime: ThornRuntime, *, database: bool, sensor_interval: float) -> None:
         self.runtime = runtime
         self.audit = AuditStore(enabled=database)
+        self.conversations = ConversationMemory(self.audit, enabled=os.getenv("THORN_CONVERSATION_MEMORY", "1") != "0")
         self.alerts = AlertEngine(runtime.bus, self.audit, max_gap=max(5, sensor_interval * 3))
         self.actions = ActionController(self.audit)
         self.language = LocalLanguageModel(
@@ -60,6 +62,7 @@ class AssistantServices:
 
     async def start(self) -> None:
         await self.audit.initialize()
+        await self.conversations.initialize()
         await self.operator.start()
         startup = [self.microphone.start(), self.language.start()]
         if isinstance(self.voice, LocalVoice):

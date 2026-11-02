@@ -6,14 +6,17 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { visibleCorePixels } from './core-pixels.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const url = process.env.THORN_TEST_URL || 'http://127.0.0.1:8004';
 const python = process.env.THORN_PYTHON || resolve(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
 const token = process.env.THORN_TEST_TOKEN || execFileSync(python, ['-B', '-c', 'from thorn_web.config import prepare_environment; prepare_environment(); import os; print(os.environ["THORN_API_TOKEN"])'], { cwd: root, encoding: 'utf8' }).trim();
 installPrivateDiagnostics(token); await waitForServer(url);
-assert(process.env.THORN_VOICE_FIXTURE_MP3, 'Requiere un MP3 de prueba ya disponible; no genera audio de pago.');
-const clip = await readFile(process.env.THORN_VOICE_FIXTURE_MP3);
+const fixturePath = process.env.THORN_VOICE_FIXTURE_WAV || process.env.THORN_VOICE_FIXTURE_MP3;
+assert(fixturePath, 'Requiere audio de prueba ya disponible; no genera audio de pago.');
+const clip = await readFile(fixturePath);
+const fixtureMime = fixturePath.toLowerCase().endsWith('.wav') ? 'audio/wav' : 'audio/mpeg';
 const executablePath = process.env.THORN_BROWSER || (existsSync('C:/Program Files/Google/Chrome/Application/chrome.exe') ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : undefined);
 const artifacts = resolve(root, '.artifacts'); await mkdir(artifacts, { recursive: true });
 const decoder = await chromium.launch({ executablePath, headless: true });
@@ -57,7 +60,7 @@ try {
     setInterval(() => { const canvas = document.querySelector('#core-canvas'); if (canvas) window.testVoiceLevels.push(Number(canvas.dataset.voiceLevel || 0)); }, 50);
   });
   const closed = () => page.evaluate(() => window.testStreams.every(stream => stream.getTracks().every(track => track.readyState === 'ended')));
-  let uploads = 0, chats = 0, speech = 0, pendingSpeech;
+  let uploads = 0, chats = 0, speech = 0, pendingSpeech, wakeTexts;
   const modules = await context.request.get(`${url}/api/v1/capabilities/`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
   await context.route('**/api/v1/capabilities/', route => route.fulfill({ json: { ...modules,
     microphone: { ...modules.microphone, available: true, state: 'ready', busy: false },
@@ -67,7 +70,7 @@ try {
     const pcm = route.request().postDataBuffer(); assert(pcm.length >= 3200 && pcm.length <= 480000);
     assert.equal(route.request().headers()['x-thorn-microphone-consent'], 'local');
     if (process.env.THORN_MIC_LIVE === '1') await route.continue();
-    else await route.fulfill({ json: { text: 'consulta de prueba', cloud: false } });
+    else await route.fulfill({ json: { text: wakeTexts?.shift() ?? 'consulta de prueba', cloud: false } });
   });
   await context.route('**/api/v1/chat/', async route => {
     chats++; counters.chats = chats; assert(await closed(), 'Sin captura mientras responde el modelo.');
@@ -77,9 +80,10 @@ try {
     speech++; counters.speech = speech; assert(await closed(), 'Sin captura durante ElevenLabs.');
     assert.equal(route.request().postDataJSON().cloud_consent, true);
     if (pendingSpeech) await pendingSpeech;
-    await route.fulfill({ contentType: 'audio/mpeg', body: clip });
+    await route.fulfill({ contentType: fixtureMime, body: clip });
   });
   await page.goto(url); await page.waitForSelector('#core-canvas[data-rendered=true]');
+  await page.locator('#conversation-wake').uncheck(); // Este flujo verifica conversación continua; el filtro por nombre tiene su suite propia.
   assert.equal(await page.evaluate(() => window.testStreams.length), 0);
   await page.locator('#session-button').click(); await page.locator('#token-input').fill(token);
   await page.locator('#session-form button[type=submit]').click();
@@ -90,25 +94,32 @@ try {
   assert(await page.locator('#microphone-text').inputValue());
   await page.waitForFunction(() => window.testStreams.length >= 2);
   await page.locator('#conversation-stop').click(); assert(await closed());
+  // Mismo Silero y dispositivo sintético, ahora con filtro por nombre.
+  const chatsBeforeWake = chats;
+  wakeTexts = ['una charla ambiental', 'Thorn, consulta de prueba'];
+  await page.locator('#conversation-wake').check();
+  const ambient = page.waitForResponse(response => response.url().endsWith('/microphone/transcribe/'));
+  await page.locator('#conversation-enabled').check(); await ambient;
+  await page.waitForFunction(() => document.querySelector('#conversation-bar').dataset.state === 'waiting_for_wake');
+  assert.equal(chats, chatsBeforeWake, 'El audio ambiental no consulta la IA.');
+  assert.notEqual(await page.locator('#microphone-text').inputValue(), 'una charla ambiental');
+  const activated = await page.waitForRequest(request => request.url().endsWith('/chat/'), { timeout: 30000 });
+  assert.equal(activated.postDataJSON().prompt, 'consulta de prueba');
+  await page.locator('#conversation-stop').click(); assert(await closed());
+  await page.locator('#conversation-wake').uncheck(); wakeTexts = null;
   await page.locator('[data-view=assistant]').click();
   await page.locator('#voice-consent').check(); await page.locator('#voice-auto').check();
   await page.locator('#conversation-enabled').check();
   await page.locator('[data-view=central]').click();
   assert(await page.locator('#conversation-enabled').isChecked(), 'Cambiar de vista no corta modo conversacion.');
-  await page.waitForFunction(() => document.querySelector('#core-canvas').dataset.voiceLevel > 0.005, { timeout: 30000 });
+  await page.waitForFunction(() => document.querySelector('#core-canvas').dataset.assistantState === 'speaking' && document.querySelector('#core-canvas').dataset.voiceLevel > 0.005, { timeout: 30000 });
   assert.equal(speech, 1); assert(await closed());
   await page.screenshot({ path: resolve(artifacts, 'conversation-desktop.png'), fullPage: true });
   await page.waitForTimeout(600);
   assert(new Set(await page.evaluate(() => window.testVoiceLevels.filter(value => value > 0.005))).size > 3, 'Nivel variable segun waveform real.');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForFunction(() => document.querySelector('#core-canvas').dataset.voiceLevel > 0.005);
-  const pixels = await page.evaluate(() => {
-    const canvas = document.querySelector('#core-canvas'), gl = canvas.getContext('webgl2');
-    const data = new Uint8Array(canvas.width * canvas.height * 4);
-    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    let visible = 0; for (let i = 3; i < data.length; i += 4) if (data[i] > 20) visible++;
-    return visible;
-  });
+  const pixels = await visibleCorePixels(page);
   assert(pixels > 300, 'Nucleo movil no vacio durante voz.');
   await page.screenshot({ path: resolve(artifacts, 'conversation-mobile-speaking.png'), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 960 });

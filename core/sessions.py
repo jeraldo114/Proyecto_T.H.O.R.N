@@ -130,6 +130,10 @@ def required_scope(path: str, method: str) -> str:
     if path.startswith("/api/v1/workspace"):
         return "workspace:read" if method == "GET" else "workspace:write"
     if path.startswith("/api/v1/conversation/"):
+        if path.endswith("/history/"):
+            return "memory:read"
+        if path.endswith("/forget/"):
+            return "memory:write"
         return "assistant:chat"
     if path.startswith("/api/v1/maps/"):
         return "network:query"

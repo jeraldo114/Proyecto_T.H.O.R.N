@@ -8,7 +8,7 @@ from urllib.parse import unquote
 from django.conf import settings
 from django.core.handlers.asgi import ASGIRequest
 from django.http import HttpResponse, JsonResponse
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from core.services import AssistantServices
 from core.documents import question_excerpts
@@ -19,7 +19,7 @@ from .views import _runtime
 
 
 def principal(request: ASGIRequest) -> tuple[str, frozenset[str]]:
-    """Una renovacion conserva identidad; otra sesion nunca comparte contexto."""
+    """RAM por sesión; el archivo del operador tiene sus propios permisos."""
     token = credential(request)
     runtime = _runtime(request)
     if token and secrets.compare_digest(token, settings.THORN_API_TOKEN):
@@ -94,7 +94,8 @@ async def reset(request: ASGIRequest, services: AssistantServices) -> JsonRespon
 @private
 async def map_lookup(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
     data = body(request, {"query", "internet_consent"})
-    return JsonResponse(await services.operator.map(principal(request)[0], data["query"], data["internet_consent"]))
+    owner, scopes = principal(request)
+    return JsonResponse(await services.operator.map(owner, data["query"], data["internet_consent"], scopes))
 
 
 @require_POST
@@ -125,6 +126,22 @@ async def download(request: ASGIRequest, services: AssistantServices, identity: 
 
 @require_POST
 @private
+async def attach_ocr(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
+    data = body(request, {"id", "page", "text", "confidence"})
+    if not isinstance(data["id"], str):
+        raise ValueError("document_invalid_ocr")
+    owner, _ = principal(request)
+    document = services.operator.documents.add_ocr(owner, data["id"], data["page"], data["text"], data["confidence"])
+    state = services.operator.store.state(owner, touch=True)
+    panel = next((p for p in state.panels.values() if p["kind"] == "document" and p["data"]["id"] == data["id"]), None)
+    if panel:
+        panel["data"] = document
+        state.revision += 1
+    return JsonResponse({"document": document, "panel": panel, "source": "local_browser_ocr"})
+
+
+@require_POST
+@private
 async def ask_document(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
     data = body(request, {"id", "prompt"})
     owner, scopes = principal(request)
@@ -135,6 +152,7 @@ async def ask_document(request: ASGIRequest, services: AssistantServices) -> Jso
     document = services.operator.documents.get(owner, data["id"])
     state = services.operator.store.state(owner, touch=True)
     generation = state.generation
+    epoch = await services.operator.memory_epoch(scopes)
     async def work() -> dict[str, object]:
         from uuid import uuid4
         excerpts = question_excerpts(document.result["pages"], data["prompt"])
@@ -143,6 +161,39 @@ async def ask_document(request: ASGIRequest, services: AssistantServices) -> Jso
             "truncated": document.result["truncated"] or
                 sum(len(page["text"]) for page in excerpts) < sum(len(page["text"]) for page in document.result["pages"])})
         services.operator.ensure_current(owner, state, generation)
+        saved = await services.operator.save_turn(data["prompt"], answer["reply"], "document", scopes, epoch)
+        services.operator.ensure_current(owner, state, generation)
         panel = services.operator.store.add_panel(owner, "answer", "Consulta al documento", {"text": answer["reply"], "document_id": data["id"]})
-        return {**answer, "panel": panel, "source": "document", "ui_commands": []}
+        return {**answer, "panel": panel, "source": "document", "ui_commands": [], "memory": saved}
     return JsonResponse(await services.operator.run(owner, work))
+
+
+@require_http_methods(["GET", "POST"])
+@private
+async def conversation_history(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
+    """Archivo cifrado del operador; no es el registro técnico de auditoría."""
+    if request.method == "POST":
+        data = body(request, {"query"}, optional={"before"})
+        before, limit, query = data.get("before"), 20, data["query"]
+    else:
+        try:
+            before = int(request.GET["before"]) if "before" in request.GET else None
+            limit = int(request.GET.get("limit", "20"))
+        except ValueError:
+            raise ValueError("invalid_conversation_page") from None
+        query = ""
+    result = await services.conversations.page(before=before, limit=limit, query=query)
+    response = JsonResponse({**result, "memory": services.conversations.status})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_POST
+@private
+async def forget_conversations(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
+    data = body(request, {"confirmation"})
+    count = await services.conversations.clear(data["confirmation"])
+    # Cierra también la RAM en todas las conexiones del mismo operador.
+    for owner in list(services.operator.store.states):
+        services.operator.store.cancel(owner, clear=True)
+    return JsonResponse({"deleted": count, "scope": "local_operator", "notes_preserved": True})

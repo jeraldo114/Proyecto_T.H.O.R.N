@@ -58,6 +58,60 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(status, 401)
         self.assertFalse(self.executed)
 
+    async def test_conversation_archive_scopes_and_explicit_forgetting(self) -> None:
+        from unittest.mock import AsyncMock
+        memory = self.services.conversations
+        memory.page = AsyncMock(return_value={"records": [], "next_before": None, "durable": True})
+        memory.clear = AsyncMock(return_value=2)
+        chat_only = self.runtime.sessions.issue(frozenset({'assistant:chat'}))['access_token']
+        for route in ('conversation/history', 'conversation/forget'):
+            status, _, _ = await self.request('/api/v1/' + route + '/', method='POST', token=chat_only, body=b'{}')
+            self.assertEqual(status, 403)
+        memory.page.assert_not_awaited(); memory.clear.assert_not_awaited()
+        status, value = await self.post('conversation/history', {'query': 'mi proyecto'})
+        self.assertEqual(status, 200)
+        memory.page.assert_awaited_once_with(before=None, limit=20, query='mi proyecto')
+        state = self.services.operator.store.state('authority')
+        self.services.operator.store.remember('authority', state, 'dato privado', 'respuesta')
+        status, value = await self.post('conversation/forget', {'confirmation': 'BORRAR MEMORIA'})
+        self.assertEqual(status, 200); self.assertEqual(value['deleted'], 2)
+        self.assertEqual(self.services.operator.store.snapshot('authority')['context_messages'], 0)
+
+    async def test_reconnected_operator_recalls_archive_but_chat_only_session_cannot(self) -> None:
+        from unittest.mock import AsyncMock, Mock
+        outgoing, archive = [], []
+        async def remote(request):
+            if request.url.path == '/api/tags':
+                return httpx.Response(200, json={'models': [{'name': 'test:local'}]})
+            outgoing.append(json.loads(request.content))
+            return httpx.Response(200, json={'done': True, 'message': {'content': json.dumps({
+                'reply': 'El proyecto se llama Espino Azul.', 'suggested_action': None})}})
+        async def append(prompt, reply, **kwargs):
+            archive.append({'date': '2026-11-02', 'user': prompt, 'assistant': reply}); return True
+        memory = Mock(available=True, errors=0, epoch=AsyncMock(return_value=0),
+                      recall=AsyncMock(side_effect=lambda prompt: (0, list(archive))),
+                      append=AsyncMock(side_effect=append))
+        self.services.conversations = memory
+        await self.services.language.stop()
+        self.services.language = LocalLanguageModel(self.audit, endpoint='http://127.0.0.1:11434',
+            model='test:local', transport=httpx.MockTransport(remote))
+        first = self.runtime.sessions.issue()['access_token']
+        status, _, _ = await self.request('/api/v1/chat/', method='POST', token=first,
+            body=json.dumps({'prompt': 'Mi proyecto se llama Espino Azul.'}).encode())
+        self.assertEqual(status, 200)
+        self.runtime.sessions.revoke(first)
+        second = self.runtime.sessions.issue()['access_token']
+        status, _, _ = await self.request('/api/v1/chat/', method='POST', token=second,
+            body=json.dumps({'prompt': '¿Cómo se llama mi proyecto?'}).encode())
+        self.assertEqual(status, 200)
+        self.assertIn('Espino Azul', outgoing[-1]['messages'][0]['content'])
+        restricted = self.runtime.sessions.issue(frozenset({'assistant:chat'}))['access_token']
+        status, _, _ = await self.request('/api/v1/chat/', method='POST', token=restricted,
+            body=b'{"prompt":"hola"}')
+        self.assertEqual(status, 200)
+        self.assertNotIn('Espino Azul', outgoing[-1]['messages'][0]['content'])
+        self.assertEqual(memory.append.await_count, 2)
+
     async def test_session_exchange_rotation_scopes_and_revocation(self) -> None:
         status, _, _ = await self.request('/api/v1/auth/session/', method='POST', body=b'{}')
         self.assertEqual(status, 401)

@@ -137,12 +137,38 @@ class OperatorServices:
             raise ValueError("invalid_prompt")
         intent = command_intent(prompt)
         if intent:
-            return await self.command(owner, intent, scopes)
+            epoch = await self.memory_epoch(scopes)
+            result = await self.command(owner, intent, scopes)
+            result["memory"] = await self.save_turn(prompt, result["reply"], "command", scopes, epoch)
+            return result
         return await self.run(owner, lambda: self.answer(owner, prompt, scopes))
+
+    async def memory_epoch(self, scopes: frozenset[str]) -> int | None:
+        """No guardar ni recuperar conversaciones de una sesión sin su permiso."""
+        if "memory:write" not in scopes or not self.services.conversations.available:
+            return None
+        try:
+            return await self.services.conversations.epoch()
+        except Exception:
+            self.services.conversations.errors += 1
+            return None
+
+    async def save_turn(self, prompt: str, reply: str, source: str,
+                        scopes: frozenset[str], epoch: int | None) -> dict[str, object]:
+        """Un fallo de disco/DB se muestra, sin ocultar la respuesta ya generada."""
+        saved = False
+        if "memory:write" in scopes and epoch is not None:
+            try:
+                saved = await self.services.conversations.append(prompt, reply, source=source, epoch=epoch)
+            except Exception:
+                self.services.conversations.errors += 1
+        return {"saved": saved, "available": self.services.conversations.available,
+                "state": "saved" if saved else "not_saved", "encrypted": saved}
 
     async def answer(self, owner: str, prompt: str, scopes: frozenset[str]) -> dict[str, object]:
         state = self.store.state(owner, touch=True)
         generation = state.generation
+        epoch = await self.memory_epoch(scopes)
         context = self.services.context()
         if "telemetry:read" not in scopes:
             context.update(telemetry=None, telemetry_fresh=False, active_alerts=[], network_local=None)
@@ -154,19 +180,32 @@ class OperatorServices:
                              for index, note in enumerate(notes)), key=lambda item: (item[0], item[1]), reverse=True)
             context["user_notes_untrusted"] = [{"text": note["text"][:240]}
                                                for score, _, note in ranked[:2] if score > 0]
+        if (self.preferences.value["memory_context_enabled"] and "memory:read" in scopes
+                and self.services.conversations.available):
+            try:
+                recalled_epoch, memories = await self.services.conversations.recall(prompt)
+                if epoch is None or epoch == recalled_epoch:
+                    context["conversation_memory_untrusted"] = memories
+            except Exception:
+                self.services.conversations.errors += 1
         started = time.monotonic()
         result = await self.services.language.ask(prompt, context=context, query_id=uuid4().hex, history=state.turns)
         # NOTA DEL OPERADOR: solo un turno completado pasa a la memoria reciente.
         # Un fallo, una cancelacion o una sesion revocada no deja media respuesta.
         self.ensure_current(owner, state, generation)
+        saved = await self.save_turn(prompt, result["reply"], "local_llm", scopes, epoch)
+        self.ensure_current(owner, state, generation)
         self.store.remember(owner, state, prompt, result["reply"])
         panel = self.store.add_panel(owner, "answer", "Respuesta de T.H.O.R.N", {"text": result["reply"]})
         return {**result, "panel": panel, "ui_commands": [], "source": "local_llm",
+                "memory": saved,
                 "context_messages": len(state.turns), "elapsed_ms": round((time.monotonic() - started) * 1000, 2)}
 
-    async def map(self, owner: str, query: object, consent: bool) -> dict[str, object]:
+    async def map(self, owner: str, query: object, consent: bool,
+                  scopes: frozenset[str] = frozenset()) -> dict[str, object]:
         state = self.store.state(owner, touch=True)
         generation = state.generation
+        epoch = await self.memory_epoch(scopes)
         async def work() -> dict[str, object]:
             data = await find_places(self.services.internet, query, consent=consent, request_id=uuid4().hex)
             self.ensure_current(owner, state, generation)
@@ -175,7 +214,9 @@ class OperatorServices:
             reply = "No encontre un articulo con coordenadas para ese lugar."
             if places:
                 reply = "Lugares con coordenadas verificables: " + "; ".join(p["title"] for p in places) + ". Elige el enlace del mapa correspondiente."
-            return self.result(reply, panel=panel, kind="map", sources=[
+            saved = await self.save_turn(str(query), reply, "map", scopes, epoch)
+            self.ensure_current(owner, state, generation)
+            return self.result(reply, panel=panel, kind="map", memory=saved, sources=[
                 {"title": p["title"], "url": p["map_url"], "excerpt": data["attribution"]} for p in places])
         return await self.run(owner, work)
 
@@ -188,7 +229,7 @@ class OperatorServices:
             panel = self.store.add_panel(owner, "document", data["name"], data)
             reply = f"Documento recibido: {data['name']}. {data['page_count']} pagina(s)."
             if not data["text_available"]:
-                reply += " No contiene texto extraible; necesita OCR, que no esta habilitado."
+                reply += " No contiene texto extraible. Usa Leer pagina escaneada en el visor para activar el OCR local."
             return self.result(reply, panel=panel, kind="document", document=data)
         return await self.run(owner, work)
 

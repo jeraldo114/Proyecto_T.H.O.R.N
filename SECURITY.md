@@ -36,10 +36,19 @@ los parches; revisaré los reportes según el problema y la información disponi
 - **Datos y secretos.** La instalación puede proteger notas y datos sensibles
   con AES-256-GCM, y las claves con DPAPI del usuario Windows. El cifrado se
   prepara en cada equipo; clonar el repositorio no lo activa por sí solo.
+- **Conversaciones persistentes.** El archivo de conversaciones exige MySQL y
+  cifrado activo: no se guarda texto plano como alternativa. Conserva turnos
+  completados hasta que se borren expresamente. La búsqueda usa índices HMAC;
+  las fechas, el tipo de turno y los patrones de coincidencias siguen siendo
+  metadatos visibles en la base. `memory:read` permite consultar el archivo del
+  operador de esta instalación; `memory:write` permite guardarlo y borrarlo.
 - **Voz y dispositivos.** La configuración predeterminada usa motores locales.
   La cámara necesita autorización propia. Las imágenes del seguimiento de manos
   se procesan en el navegador. Las integraciones remotas opcionales requieren
   su configuración y sus consentimientos.
+- **OCR local.** El reconocimiento usa un worker del navegador y recursos
+  servidos por T.H.O.R.N. No consulta CDN ni envía páginas a una API. El texto
+  reconocido se trata como contenido de documento no confiable, sin permisos OS.
 - **Internet separado.** Las consultas web necesitan autorización. Los mapas
   cargan teselas de OpenStreetMap cuando se solicitan, con atribución y el
   origen local como Referer. No se envían notas ni documentos con esas consultas.
@@ -63,6 +72,11 @@ Ocultar una carpeta o ignorarla en Git no cifra lo que contiene. Guarda tus
 claves de recuperación con cuidado y conserva una copia recuperable fuera del
 equipo cuando prepares tus respaldos. Los detalles están en
 [Cifrado y respaldos](docs/CIFRADO_Y_RESPALDOS.md).
+
+Borrar el contexto de una sesión no borra el archivo de conversaciones. Su
+borrado permanente se hace desde Memoria, escribiendo `BORRAR MEMORIA`; los
+respaldos anteriores conservan sus propias copias. La opción
+`THORN_CONVERSATION_MEMORY=0` desactiva la captura y recuperación persistentes.
 
 Para MySQL conviene preparar un usuario exclusivo con los permisos necesarios.
 La cuenta `root` de la plantilla está pensada como punto de partida para pruebas

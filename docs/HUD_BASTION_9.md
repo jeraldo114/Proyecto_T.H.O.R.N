@@ -54,8 +54,9 @@ el acceso al texto y al original.
 
 El parser del backend sigue aislado y aplica los limites documentados en
 [Bastion 9](BASTION_9.md): 8 MiB, 40 paginas y extraccion textual acotada.
-La consulta usa ese texto, no las imagenes representadas. No hay OCR ni analisis
-visual de circuitos por el modelo de lenguaje.
+La consulta usa ese texto, no las imagenes representadas. **Leer página escaneada**
+añade OCR local en español; no hay análisis visual de circuitos por el modelo.
+Los controles nuevos están en [Memoria y fluidez](MEMORIA_Y_FLUIDEZ.md).
 
 ## Mapas
 

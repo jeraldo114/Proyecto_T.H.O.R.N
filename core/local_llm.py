@@ -120,7 +120,16 @@ class LocalLanguageModel:
                       "properties": {"reply": {"type": "string"}, "suggested_action": {
                           "type": ["string", "null"], "enum": [None] if untrusted_document else [None, *CATALOG]}},
                       "required": ["reply", "suggested_action"]}
-            system = system_prompt(context)
+            bounded = dict(context)
+            memories = list(bounded.get("conversation_memory_untrusted", []))
+            if "conversation_memory_untrusted" in bounded:
+                bounded["conversation_memory_untrusted"] = memories
+            system = system_prompt(bounded)
+            # NOTA DEL OPERADOR: el cuaderno puede crecer en disco; el contexto
+            # de Qwen no. Sacamos extractos de menor prioridad antes de llenar RAM.
+            while memories and len(system.encode("utf-8")) + len(prompt.encode("utf-8")) > 6400:
+                memories.pop()
+                system = system_prompt(bounded)
             # El historial llega del almacen de la sesion autenticada, no de JSON
             # que permita al cliente introducir mensajes con rol system/tool.
             recent: list[dict[str, str]] = []

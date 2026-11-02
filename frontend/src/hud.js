@@ -77,6 +77,7 @@ const operatorTools = new OperatorTools({
   canPresent: () => !chatBusy,
   onReply: (result, { announce }) => {
     consoleReply(result.reply);
+    if (result.memory?.available && !result.memory.saved) toast('La respuesta está lista, pero este turno no se guardó en la memoria permanente.');
     proposedAction = result.suggested_action || null;
     $('#suggested-action-button').hidden = !proposedAction || !capabilities?.actions.enabled;
     if (announce && $('#voice-auto').checked && !conversation.enabled && !chatBusy) void speakText(result.reply, { automatic: true });
@@ -478,9 +479,11 @@ $('#network-diagnose').addEventListener('click', () => void submitWeb({ mode: 'd
 
 function renderConversation() {
   const states = { off: 'Micrófono apagado', loading: 'Preparando escucha local…', listening: 'Escuchando / local', hearing: 'Recibiendo tu voz / local', transcribing: 'Micrófono cerrado / transcribiendo', thinking: 'Micrófono cerrado / consultando', speaking: 'Micrófono cerrado / respuesta', blocked: 'Audio pendiente / pulsa reproducir', permission_required: 'Permiso o gesto inicial pendiente / activa Conversación', device_lost: 'Micrófono desconectado', input_error: 'No se pudo iniciar la escucha', turn_error: 'Conversación detenida / servicio no disponible' };
+  states.waiting_for_wake = 'Escucha local / di «Thorn» para empezar';
   $('#conversation-enabled').checked = conversation.enabled;
   $('#conversation-enabled').disabled = !token || !online || paused || !capabilities?.microphone.available || !PcmMicrophone.supported();
   $('#conversation-stop').disabled = !conversation.enabled;
+  $('#conversation-wake').disabled = conversation.enabled;
   $('#conversation-bar').dataset.state = conversation.state;
   text('#conversation-state', states[conversation.state] || states.off);
   if (conversation.enabled) text('#microphone-result', states[conversation.state] || states.off);
@@ -497,6 +500,7 @@ async function startConversation() {
   if (!token || !online || paused || document.hidden || chatBusy || !capabilities?.microphone.available || !PcmMicrophone.supported()) return;
   conversationAutoAttempted = true;
   cancelMicrophone(); stopSpeech();
+  conversation.requireWake = $('#conversation-wake').checked;
   await conversation.start($('#microphone-device').value);
 }
 $('#conversation-enabled').addEventListener('change', event => { conversationAutoAttempted = true; if (event.target.checked) void startConversation(); else stopConversation(); });

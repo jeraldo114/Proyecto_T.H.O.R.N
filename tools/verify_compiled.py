@@ -115,6 +115,7 @@ def main() -> int:
                  'PYTHONHOME', 'PYTHONPATH', 'THORN_DATA_DIR'}
     environment = {key:value for key,value in os.environ.items() if key not in forbidden}
     environment['THORN_CONVERSATION_AUTO_START'] = '0'  # La prueba usa audio sintetico, no abre el microfono fisico.
+    environment['THORN_CONVERSATION_MEMORY'] = '0'  # No mezclar preguntas de prueba con el cuaderno real del operador.
     log_path = ROOT / '.artifacts/compiled-services.log'
     with tempfile.TemporaryDirectory(prefix='thorn-exe-test-', ignore_cleanup_errors=True) as working, log_path.open('wb') as log:
         process = subprocess.Popen([str(args.binary.resolve()), '--background', '--data-dir', str(root)],

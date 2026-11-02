@@ -9,7 +9,7 @@ self.onmessage = async event => {
       detector = await HandLandmarker.createFromOptions(files, {
         baseOptions: { modelAssetPath: '/hud/assets/hand_landmarker.task', delegate: 'CPU' },
         runningMode: 'VIDEO', numHands: 1, canvas: new OffscreenCanvas(640, 480),
-        minHandDetectionConfidence: 0.65, minHandPresenceConfidence: 0.65, minTrackingConfidence: 0.65,
+        minHandDetectionConfidence: 0.75, minHandPresenceConfidence: 0.75, minTrackingConfidence: 0.7,
       });
       self.postMessage({ type: 'ready' });
     } catch { self.postMessage({ type: 'error', code: 'vision_model_unavailable' }); }

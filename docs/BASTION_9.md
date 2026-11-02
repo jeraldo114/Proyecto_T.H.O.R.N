@@ -1,6 +1,8 @@
 # T.H.O.R.N — Bastion 9
 
 Actualizacion funcional, 1 de noviembre de 2026. Version del codigo: `0.9.0`.
+El 2 de noviembre se añadieron memoria permanente, OCR local y activación por
+nombre; ver [Memoria y fluidez](MEMORIA_Y_FLUIDEZ.md).
 El [escritorio visual](HUD_BASTION_9.md) conecta estas capacidades mediante
 Presencia/Trabajo, menu radial, dock y ventanas de resultados. La vista
 **Asistente** conserva los controles de servicio bajo **BASTION 9 / HERRAMIENTAS**.
@@ -30,7 +32,7 @@ Una sugerencia o un gesto nunca confirma una accion de Windows.
 
 ## Contexto, memoria y resultados
 
-El contexto conversacional vive solo en RAM: hasta ocho mensajes breves
+El contexto reciente de cada sesión vive en RAM: hasta ocho mensajes breves
 completados, con limite adicional de bytes. El envio al modelo aplica otro
 presupuesto para conservar sus 2048 tokens de contexto configurados; no se
 promete recordar una conversacion ilimitada. Una renovacion del token conserva
@@ -41,7 +43,10 @@ el contexto inactivo caduca a los 900 s.
 Las notas explicitas siguen en la memoria cifrada existente. Solo se adjuntan
 hasta dos notas breves con coincidencias de palabras cuando esta preferencia y
 el permiso lo permiten. Es una recuperacion sencilla, no memoria semantica ni
-entrenamiento del modelo. No se persisten conversaciones completas por defecto.
+entrenamiento del modelo. Además, los turnos completados se archivan cifrados
+por defecto cuando MySQL y el cifrado están disponibles. Las sesiones con
+`memory:read` recuperan recuerdos de ese archivo al reconectar. Borrar la RAM
+no elimina el archivo; el borrado permanente se hace desde Memoria.
 
 Cada sesion admite ocho resultados con tipo, titulo, origen, fecha, estado y
 posicion normalizada. Hay cierre, enfoque, minimizado, restauracion y movimiento.
@@ -62,8 +67,9 @@ variables privadas del servidor.
 El texto de un PDF es contenido no confiable. Sus consultas no reciben notas
 privadas ni capacidad de proponer acciones OS. La seleccion para una pregunta
 prioriza coincidencias locales y limita los extractos a 3600 caracteres; puede
-omitir informacion, por lo que se indica truncamiento. No hay OCR, interpretacion
-de circuitos o imagenes ni ejecucion de scripts PDF. El visor grafico usa PDF.js
+omitir informacion, por lo que se indica truncamiento. El visor permite OCR
+local de una página escaneada. No hay interpretación visual de circuitos ni
+ejecución de scripts PDF. El visor grafico usa PDF.js
 con workers locales, paginas y zoom; el texto extraido sigue disponible. Ver un
 esquema no implica que el modelo de texto interprete su circuito o sus imagenes.
 

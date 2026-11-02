@@ -16,15 +16,18 @@ const video = () => ({ readyState: 4, srcObject: null, play: async () => {}, pau
 test('gestos requieren palma sostenida y usan histeresis de pinza', () => {
   const gestures = new GestureInterpreter(), points = palm();
   assert.equal(gestures.update(points, 0).state, 'hold_palm');
+  gestures.update(points, 200); gestures.update(points, 400);
   assert.equal(gestures.update(points, 500).dragging, false);
   assert.equal(gestures.update(points, 601).state, 'cursor');
   points[4] = { x: 0.51, y: 0.1 };
-  assert.equal(gestures.update(points, 700).dragging, true);
+  assert.equal(gestures.update(points, 700).dragging, false);
+  assert.equal(gestures.update(points, 790).dragging, true);
   points[4] = { x: 0.69, y: 0.1 };
-  assert.equal(gestures.update(points, 750).dragging, true);
+  assert.equal(gestures.update(points, 850).dragging, true);
   points[4] = { x: 0.9, y: 0.1 };
-  assert.equal(gestures.update(points, 800).released, true);
-  assert.equal(gestures.update([], 1300).state, 'waiting');
+  assert.equal(gestures.update(points, 900).released, false);
+  assert.equal(gestures.update(points, 990).released, true);
+  assert.equal(gestures.update([], 1500).state, 'waiting');
 });
 
 test('puntos malformados o tiempo no finito nunca activan una pinza', () => {

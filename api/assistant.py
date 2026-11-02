@@ -45,6 +45,7 @@ def private(handler: Handler) -> Callable[[ASGIRequest], Awaitable[HttpResponse]
             allowed.update({"voice_model_missing", "voice_engine_missing", "voice_model_invalid",
                             "voice_loading", "voice_synthesis_failed", "voice_policy_blocked", "web_paid_provider_blocked"})
             allowed.add('secure_storage_unavailable')
+            allowed.add('conversation_memory_unavailable')
             allowed.update({"interaction_busy", "interaction_cancelled", "interaction_capacity", "document_busy"})
             allowed.update({"microphone_busy", "microphone_disabled", "microphone_closed",
                             "microphone_model_missing", "microphone_engine_missing", "microphone_loading",
@@ -88,6 +89,7 @@ async def capabilities(request: ASGIRequest, services: AssistantServices) -> Jso
                                           "vad": "silero_local", "max_seconds": 15},
                          "internet": services.internet.status,
                          "operator": {"context": "session_memory", "context_ttl_seconds": 900,
+                                      "memory": services.conversations.status,
                                       "panel_capacity": 8, "documents": "local_pdf_text", "max_pdf_bytes": 8 * 1024 * 1024,
                                       "camera": "browser_explicit_consent", "camera_allowed": "camera:use" in scopes,
                                       "briefing_enabled": services.operator.preferences.value["briefing_enabled"]},
@@ -195,9 +197,10 @@ async def web_read(request: ASGIRequest, services: AssistantServices) -> JsonRes
 
 async def web_result(request: ASGIRequest, services: AssistantServices, data: dict[str, object], *, read: bool) -> JsonResponse:
     from .operator import principal
-    owner, _ = principal(request)
+    owner, scopes = principal(request)
     state = services.operator.store.state(owner, touch=True)
     generation = state.generation
+    epoch = await services.operator.memory_epoch(scopes)
     async def work() -> dict[str, object]:
         if read:
             result = await services.internet.read(data["url"], consent=data["internet_consent"], identity=uuid4().hex)
@@ -207,10 +210,12 @@ async def web_result(request: ASGIRequest, services: AssistantServices, data: di
             prompt = "Resume los resultados para: " + data["query"]
         answer = await services.web_answer(result, prompt)
         services.operator.ensure_current(owner, state, generation)
+        saved = await services.operator.save_turn(prompt, answer["reply"], "internet", scopes, epoch)
+        services.operator.ensure_current(owner, state, generation)
         services.operator.store.remember(owner, state, prompt, answer["reply"])
         panel = services.operator.store.add_panel(owner, "sources", "Fuentes consultadas", {
             "sources": answer["sources"], "text": answer["reply"]}, source="internet")
-        return {**answer, "panel": panel, "ui_commands": []}
+        return {**answer, "panel": panel, "ui_commands": [], "memory": saved}
     return JsonResponse(await services.operator.run(owner, work))
 
 

@@ -4,17 +4,61 @@ GlobalWorkerOptions.workerSrc = '/hud/assets/pdf.worker.min.mjs';
 GlobalWorkerOptions.rendererSrc = '/hud/assets/pdf.renderer.min.mjs';
 
 /** Visor local: canvas y workers, sin ejecutar acciones o JavaScript del PDF. */
-export function createPdfViewer(root, { id, credential, active, onError }) {
+export function createPdfViewer(root, { id, credential, active, onError, onOcr }) {
   const toolbar = document.createElement('div'); toolbar.className = 'viewer-toolbar';
   const previous = button('‹', 'Página anterior'), next = button('›', 'Página siguiente');
   const smaller = button('−', 'Reducir PDF'), larger = button('+', 'Ampliar PDF');
   const count = document.createElement('span'); count.textContent = 'Cargando documento local…';
   toolbar.append(previous, count, next, smaller, larger);
+  const ocrButton = button('Leer página escaneada', 'Reconocer texto de esta página con OCR local');
+  const cancelOcr = button('Cancelar lectura', 'Cancelar OCR'); cancelOcr.hidden = true;
+  toolbar.append(ocrButton, cancelOcr);
   const surface = document.createElement('div'); surface.className = 'pdf-surface';
   const message = document.createElement('p'); message.className = 'viewer-message';
   root.append(toolbar, surface, message);
   let pdf, loading, drawing, closing, pageNumber = 1, zoom = 1, disposed = false, visible = true, revision = 0, timer;
   const abort = new AbortController();
+  let ocrAbort, ocrDrawing;
+  cancelOcr.onclick = () => { ocrAbort?.abort(); ocrDrawing?.cancel(); };
+  ocrButton.onclick = async () => {
+    if (!pdf || disposed || !visible || !active() || ocrAbort) return;
+    const controller = new AbortController(); ocrAbort = controller;
+    const selectedPage = pageNumber;
+    ocrButton.disabled = true; cancelOcr.hidden = false;
+    message.textContent = 'Preparando lectura local de esta página…';
+    let canvas;
+    try {
+      const page = await pdf.getPage(selectedPage), natural = page.getViewport({ scale: 1 });
+      if (controller.signal.aborted || disposed) return;
+      const scale = Math.min(2.1, Math.sqrt(2300000 / (natural.width * natural.height)));
+      const viewport = page.getViewport({ scale });
+      canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      ocrDrawing = page.render({ canvas, viewport }); await ocrDrawing.promise;
+      const { localOcr } = await import('/hud/assets/ocr.js');
+      if (controller.signal.aborted || disposed) return;
+      const result = await localOcr.recognize(canvas, { signal: controller.signal,
+        onProgress: value => { if (!disposed && !controller.signal.aborted) message.textContent = `Leyendo página en tu PC… ${Math.round((value.progress || 0) * 100)} %`; } });
+      if (disposed || controller.signal.aborted || !active()) return;
+      if (!result.text) { message.textContent = 'No se detectó texto legible en esta página.'; return; }
+      const token = await credential();
+      if (disposed || controller.signal.aborted || !active()) return;
+      const response = await fetch('/api/v1/documents/ocr/', { method: 'POST', headers: {
+        Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, page: selectedPage, text: result.text, confidence: result.confidence }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]), credentials: 'omit', cache: 'no-store' });
+      const attached = await response.json();
+      if (!response.ok) throw new Error(attached.error || 'document_invalid_ocr');
+      if (disposed || controller.signal.aborted || !active()) return;
+      onOcr?.(attached);
+      message.textContent = `Texto reconocido en la página ${selectedPage}. Ya puedes preguntarle a T.H.O.R.N.${result.confidence < 75 ? ' Revisa el texto: la confianza es baja.' : ''}${result.truncated ? ' Se usó un extracto de 3000 caracteres.' : ''} OCR lee texto; no interpreta circuitos.`;
+    } catch (error) {
+      if (!disposed) message.textContent = controller.signal.aborted ? 'Lectura cancelada.' : 'No se pudo leer la página. Prueba con una imagen más nítida o revisa el límite de texto.';
+      if (!disposed && !controller.signal.aborted) onError?.(error);
+    } finally {
+      if (canvas) { canvas.width = canvas.height = 0; }
+      if (ocrAbort === controller) { ocrAbort = null; ocrDrawing = null; ocrButton.disabled = false; cancelOcr.hidden = true; }
+    }
+  };
   function release() {
     // PDF.js 6 libera documento, transporte y renderizador desde LoadingTask.
     // No invocar destroy() sobre PDFDocumentProxy ni destruir dos veces en una carrera.
@@ -51,8 +95,8 @@ export function createPdfViewer(root, { id, credential, active, onError }) {
       }
     }
   }
-  previous.onclick = () => { if (pageNumber > 1) { pageNumber--; void render(); } };
-  next.onclick = () => { if (pdf && pageNumber < pdf.numPages) { pageNumber++; void render(); } };
+  previous.onclick = () => { if (!ocrAbort && pageNumber > 1) { pageNumber--; void render(); } };
+  next.onclick = () => { if (!ocrAbort && pdf && pageNumber < pdf.numPages) { pageNumber++; void render(); } };
   smaller.onclick = () => { zoom = Math.max(0.5, zoom - 0.25); void render(); };
   larger.onclick = () => { zoom = Math.min(2, zoom + 0.25); void render(); };
   const host = root.closest('.floating-content') || root;
@@ -88,8 +132,9 @@ export function createPdfViewer(root, { id, credential, active, onError }) {
     }
   })();
   return {
-    visible(value) { visible = value; if (!value) { revision++; drawing?.cancel(); } else void render(); },
+    visible(value) { visible = value; if (!value) { revision++; drawing?.cancel(); ocrAbort?.abort(); ocrDrawing?.cancel(); } else void render(); },
     dispose() { disposed = true; revision++; abort.abort(); drawing?.cancel(); clearTimeout(timer); observer.disconnect();
+      ocrAbort?.abort(); ocrDrawing?.cancel();
       void release(); surface.replaceChildren(); },
   };
 }

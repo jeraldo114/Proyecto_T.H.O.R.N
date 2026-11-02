@@ -42,10 +42,18 @@ async def read_rows(cur: object, cipher: StorageCipher | tuple[StorageCipher, ..
     await cur.execute('SELECT id,created_at,kind,status,summary,details FROM thorn_audit ORDER BY id LIMIT 50001' + suffix)
     audit = await cur.fetchall()
     if len(audit) > 50000: raise ValueError('backup_too_many_records')
+    await cur.execute("SELECT table_name FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=%s", ('thorn_conversation',))
+    conversation = []
+    if await cur.fetchone():
+        await cur.execute('SELECT id,identity,created_at,source,payload FROM thorn_conversation ORDER BY id LIMIT 10001' + suffix)
+        conversation = await cur.fetchall()
+        if len(conversation) > 10000: raise ValueError('backup_too_many_conversations')
     def decode() -> dict[str, object]:
         return {'settings': [{'name': row[0], 'value': decode_record(row[1], f'setting:{row[0]}', cipher)} for row in settings],
             'audit': [{'id': row[0], 'created_at': row[1].isoformat(timespec='microseconds'), 'kind': row[2],
-                'status': row[3], 'summary': row[4], 'details': decode_record(row[5], f'audit:{row[0]}', cipher)} for row in audit]}
+                'status': row[3], 'summary': row[4], 'details': decode_record(row[5], f'audit:{row[0]}', cipher)} for row in audit],
+            'conversation': [{'id': row[0], 'identity': row[1], 'created_at': row[2].isoformat(timespec='microseconds'),
+                'source': row[3], 'turn': decode_record(row[4], f'conversation:{row[1]}', cipher)} for row in conversation]}
     return await asyncio.to_thread(decode)
 
 
@@ -75,7 +83,7 @@ def validate_snapshot(value: object) -> dict[str, object]:
     if (not isinstance(config, dict) or set(config) & (SECRET_NAMES | {'THORN_API_TOKEN'}) or
         any(not re.fullmatch(r'[A-Z_][A-Z_0-9]{0,63}', key) or not isinstance(item, str) or len(item) > 4096 for key,item in config.items())):
         raise ValueError('invalid_backup_payload')
-    if not isinstance(rows, dict) or set(rows) != {'settings', 'audit'}:
+    if not isinstance(rows, dict) or set(rows) not in ({'settings', 'audit'}, {'settings', 'audit', 'conversation'}):
         raise ValueError('invalid_backup_payload')
     if not isinstance(rows['settings'], list) or len(rows['settings']) > 128 or not isinstance(rows['audit'], list) or len(rows['audit']) > 50000:
         raise ValueError('invalid_backup_payload')
@@ -91,6 +99,18 @@ def validate_snapshot(value: object) -> dict[str, object]:
         datetime.fromisoformat(row['created_at']); identities.add(row['id'])
         for key, maximum in [('kind',64), ('status',32), ('summary',200)]:
             if not isinstance(row[key], str) or len(row[key]) > maximum: raise ValueError('invalid_backup_payload')
+    turns = rows.get('conversation', [])
+    if not isinstance(turns, list) or len(turns) > 10000: raise ValueError('invalid_backup_payload')
+    ids, unique = set(), set()
+    for row in turns:
+        if (not isinstance(row, dict) or set(row) != {'id', 'identity', 'created_at', 'source', 'turn'}
+            or type(row['id']) is not int or row['id'] < 1 or row['id'] in ids
+            or not isinstance(row['identity'], str) or not re.fullmatch('[a-f0-9]{32}', row['identity'])
+            or row['identity'] in unique or row['source'] not in {'local_llm', 'command', 'document', 'internet', 'map', 'briefing'}
+            or not isinstance(row['turn'], dict) or set(row['turn']) != {'prompt', 'reply'}
+            or any(not isinstance(row['turn'][k], str) or not 1 <= len(row['turn'][k]) <= limit for k,limit in [('prompt',2000),('reply',4000)])):
+            raise ValueError('invalid_backup_payload')
+        datetime.fromisoformat(row['created_at']); ids.add(row['id']); unique.add(row['identity'])
     return value
 
 
@@ -127,6 +147,19 @@ async def restore_database(value: dict[str, object], database: str, *, temporary
                 sealed = await asyncio.to_thread(cipher.encrypt, row['details'], f"audit:{row['id']}")
                 await cur.execute(f'INSERT INTO `{database}`.thorn_audit (id,created_at,kind,status,summary,details) VALUES (%s,%s,%s,%s,%s,%s)',
                     (row['id'], datetime.fromisoformat(row['created_at']), row['kind'], row['status'], row['summary'], sealed))
+            if 'conversation' in value['rows']:
+                from core.audit import AuditStore
+                from core.conversation_memory import ConversationMemory
+                index = ConversationMemory(AuditStore(enabled=True, cipher=cipher))
+                await cur.execute(f'CREATE TABLE `{database}`.thorn_conversation (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,identity CHAR(32) CHARACTER SET ascii NOT NULL UNIQUE,created_at DATETIME(6) NOT NULL,source VARCHAR(24) NOT NULL,payload MEDIUMTEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4')
+                await cur.execute(f'CREATE TABLE `{database}`.thorn_conversation_terms (term CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,turn_id BIGINT UNSIGNED NOT NULL,PRIMARY KEY(term,turn_id),INDEX thorn_term_turn(turn_id),FOREIGN KEY(turn_id) REFERENCES `{database}`.thorn_conversation(id) ON DELETE CASCADE) ENGINE=InnoDB')
+                for row in value['rows']['conversation']:
+                    sealed = await asyncio.to_thread(cipher.encrypt, row['turn'], f"conversation:{row['identity']}")
+                    await cur.execute(f'INSERT INTO `{database}`.thorn_conversation (id,identity,created_at,source,payload) VALUES (%s,%s,%s,%s,%s)',
+                        (row['id'], row['identity'], datetime.fromisoformat(row['created_at']), row['source'], sealed))
+                    hashes = await asyncio.to_thread(index.term_hashes, row['turn']['prompt'] + ' ' + row['turn']['reply'])
+                    if hashes:
+                        await cur.executemany(f'INSERT INTO `{database}`.thorn_conversation_terms(term,turn_id) VALUES (%s,%s)', [(term,row['id']) for term in hashes])
             await conn.commit()
             await cur.execute(f'SELECT name,value FROM `{database}`.thorn_settings ORDER BY name')
             restored_settings = await cur.fetchall()
@@ -138,6 +171,12 @@ async def restore_database(value: dict[str, object], database: str, *, temporary
             for actual, expected in zip(restored_audit, value['rows']['audit'], strict=True):
                 if actual[0] != expected['id'] or await asyncio.to_thread(cipher.decrypt, actual[1], f'audit:{actual[0]}') != expected['details']:
                     raise ValueError('restore_verification_failed')
+            if 'conversation' in value['rows']:
+                await cur.execute(f'SELECT id,identity,payload FROM `{database}`.thorn_conversation ORDER BY id')
+                for actual, expected in zip(await cur.fetchall(), value['rows']['conversation'], strict=True):
+                    if (actual[0] != expected['id'] or actual[1] != expected['identity'] or
+                        await asyncio.to_thread(cipher.decrypt, actual[2], f'conversation:{actual[1]}') != expected['turn']):
+                        raise ValueError('restore_verification_failed')
         finally:
             # Solo se elimina la base temporal que ESTA invocacion acaba de crear.
             if temporary and created:
@@ -196,6 +235,17 @@ async def migrate(root: Path, vault: Vault, value: dict[str, object], old_cipher
         for row in current['audit']:
             sealed = await asyncio.to_thread(vault.cipher.encrypt, row['details'], f"audit:{row['id']}")
             await cur.execute('UPDATE thorn_audit SET details=%s WHERE id=%s', (sealed, row['id']))
+        if current['conversation']:
+            from core.audit import AuditStore
+            from core.conversation_memory import ConversationMemory
+            index = ConversationMemory(AuditStore(enabled=True, cipher=vault.cipher))
+            await cur.execute('DELETE FROM thorn_conversation_terms')
+            for row in current['conversation']:
+                sealed = await asyncio.to_thread(vault.cipher.encrypt, row['turn'], f"conversation:{row['identity']}")
+                await cur.execute('UPDATE thorn_conversation SET payload=%s WHERE id=%s', (sealed,row['id']))
+                terms = await asyncio.to_thread(index.term_hashes, row['turn']['prompt'] + ' ' + row['turn']['reply'])
+                if terms:
+                    await cur.executemany('INSERT INTO thorn_conversation_terms(term,turn_id) VALUES (%s,%s)', [(term,row['id']) for term in terms])
         await conn.commit()
     await asyncio.to_thread(save_vault, vault, root, replace=True)
     def activate() -> None:

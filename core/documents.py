@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -142,3 +143,19 @@ class DocumentService:
         if item is None or item.owner != owner:
             raise ValueError("document_not_found")
         return item
+
+    def add_ocr(self, owner: str, identity: str, page: object, text: object,
+                confidence: object) -> dict[str, object]:
+        """Adjunta texto OCR no confiable; nunca cambia el PDF original."""
+        item = self.get(owner, identity)
+        if (type(page) is not int or not 1 <= page <= item.result["page_count"]
+                or not isinstance(text, str) or not 1 <= len(text.strip()) <= 3000
+                or type(confidence) not in {int, float} or not math.isfinite(confidence)
+                or not 0 <= confidence <= 100):
+            raise ValueError("document_invalid_ocr")
+        pages = [p for p in item.result["pages"] if p["page"] != page]
+        if sum(len(p["text"]) for p in pages) + len(text) > 6000:
+            raise ValueError("document_ocr_text_limit")
+        pages.append({"page": page, "text": text.strip(), "source": "ocr", "confidence": round(confidence, 1)})
+        item.result.update(pages=sorted(pages, key=lambda p: p["page"]), ocr=True, text_available=True)
+        return {"id": identity, "name": item.name, "size_bytes": len(item.raw), **item.result, "durable": False}

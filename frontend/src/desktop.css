@@ -138,3 +138,9 @@ body.hud-desktop {
   .inspector-window { min-height: 0; max-height: calc(100dvh - 300px); }
   .floating-panel { min-height: 120px; }
 }
+.conversation-archive { margin-bottom: 2rem; }
+.conversation-archive form { display: flex; gap: .75rem; align-items: end; flex-wrap: wrap; margin: .8rem 0; }
+.conversation-archive label { flex: 1; min-width: 12rem; }
+.conversation-archive input { width: 100%; margin-top: .4rem; }
+.conversation-turn { border-top: 1px solid var(--line, #24404c); padding: 1rem 0; }
+.conversation-turn p { white-space: pre-wrap; overflow-wrap: anywhere; }

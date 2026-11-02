@@ -59,7 +59,7 @@ ni como evidencia de que el modelo esta pensando.
 | Enfoque | El boton de enfoque oculta telemetria y actividad. | Convertirlo en un modo Presencia completo, con reloj y controles esenciales. |
 | Resultados | Vistas por seccion y una salida principal de consola. | Introducir paneles por resultado, con titulo, origen, estado y controles. |
 | Conversacion | VAD, dictado Vosk, Ollama y salida Piper, por turnos. | Contexto breve aislado por sesion para preguntas de seguimiento. |
-| Memoria | Notas explicitas e historial persistente cifrado. | Recuperar preferencias pertinentes sin guardar todas las conversaciones por defecto. |
+| Memoria | Notas explícitas e historial persistente cifrado. | La propuesta inicial conservaba solo notas. El operador pidió después archivar conversaciones: se implementa con cifrado y permisos propios. Ver [Memoria y fluidez](MEMORIA_Y_FLUIDEZ.md). |
 | Internet | Busqueda, lectura y resumen con fuentes; consentimiento por sesion. | Presentar esas fuentes en paneles. PDF, mapas y otros formatos necesitan adaptadores propios. |
 | Acciones Windows | Catalogo cerrado, confirmacion y auditoria. | Ampliar destinos concretos cuando sean necesarios, conservando ese recorrido. |
 | Camara y gestos | No forman parte del HUD actual. | Modulos opcionales, con permiso, indicador visible y cierre efectivo del dispositivo. |
