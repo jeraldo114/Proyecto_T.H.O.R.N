@@ -18,6 +18,7 @@ MIME_TYPES = {
     ".mjs": "text/javascript; charset=utf-8", ".wasm": "application/wasm",
     ".onnx": "application/octet-stream",
     ".task": "application/octet-stream",
+    ".gz": "application/octet-stream",
     ".bcmap": "application/octet-stream", ".pfb": "application/octet-stream",
     ".ttf": "font/ttf", ".png": "image/png", ".svg": "image/svg+xml",
 }

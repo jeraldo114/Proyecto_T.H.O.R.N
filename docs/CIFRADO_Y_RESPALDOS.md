@@ -13,13 +13,16 @@ La interfaz muestra **MEMORIA PROTEGIDA** cuando el backend usa AES-256-GCM.
   AES-256-GCM con nonce aleatorio nuevo y contexto autenticado por registro.
 - `thorn_audit.details`: AES-256-GCM, ligado al ID SQL. Fecha, tipo, estado y
   resumen operativo del evento siguen disponibles como metadatos.
+- `thorn_conversation.payload`: preguntas y respuestas completas, cifradas por
+  identidad de turno. El índice de palabras usa HMAC y se reconstruye al restaurar.
 - Autoridad del HUD: conserva su archivo DPAPI y es distinta de la clave AES.
 - Respaldos `.thornbak`: AES-256-GCM, clave de archivo envuelta con RSA-OAEP
   SHA-256 y firma Ed25519. Se autentican antes de restaurarlos.
 
 SQL sigue usando aiomysql y consultas parametrizadas. Acceso a claves, archivos
 y cifrado ocurren en workers; no se amplian los permisos del asistente. Las
-preguntas, respuestas y audio siguen sin guardarse como conversaciones.
+conversaciones completadas ahora se archivan cifradas por petición del operador;
+el audio no se guarda. Ver [Memoria y fluidez](MEMORIA_Y_FLUIDEZ.md).
 Una clave o registro incorrecto produce `secure_storage_unavailable`, sin
 fallback a texto plano ni regeneracion de claves de datos.
 

@@ -168,6 +168,22 @@ class InternetTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("consulta confidencial", repr(self.audit.rows))
         self.assertEqual([row["status"] for row in self.audit.rows], ["started", "completed"])
 
+    async def test_research_reads_sources_and_preserves_unavailable_excerpt(self) -> None:
+        client = FakeWebClient()
+        response = {"query": {"pages": [
+            {"title": "Uno", "fullurl": "https://es.wikipedia.org/wiki/Uno", "extract": "Primero"},
+            {"title": "Dos", "fullurl": "https://es.wikipedia.org/wiki/Dos", "extract": "Segundo"},
+        ]}}
+        client.get = AsyncMock(side_effect=[
+            (json.dumps(response).encode(), "application/json", "https://es.wikipedia.org/w/api.php"),
+            (b"<title>Uno</title><p>Pagina consultada</p>", "text/html", "https://es.wikipedia.org/wiki/Uno"),
+            TimeoutError(),
+        ])
+        result = await self.service(client).search("numeros", consent=True, identity="test", investigate=True)
+        self.assertEqual([source["kind"] for source in result["sources"]], ["page", "search"])
+        self.assertEqual(result["sources"][1]["excerpt"], "Segundo")
+        self.assertEqual(client.get.await_count, 3)
+
     async def test_search_rejects_malformed_data_and_untrusted_links(self) -> None:
         client = FakeWebClient({"query": {"pages": [{"title": "Bad", "fullurl": "https://127.0.0.1/"}, {"title": "Bad", "fullurl": "https://evil.example.org/"}]}})
         service = self.service(client)

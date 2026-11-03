@@ -44,7 +44,7 @@ export class ConversationCapture {
           baseAssetPath: '/hud/assets/', onnxWASMBasePath: '/hud/assets/',
           ortConfig: ort => { ort.env.logLevel = 'error'; ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = true; },
           positiveSpeechThreshold: 0.6, negativeSpeechThreshold: 0.4,
-          redemptionMs: 800, preSpeechPadMs: 300, minSpeechMs: 250, submitUserSpeechOnPause: true,
+          redemptionMs: 650, preSpeechPadMs: 300, minSpeechMs: 250, submitUserSpeechOnPause: true,
           getStream: () => this.getStream(), resumeStream: () => this.getStream(),
           pauseStream: async stream => { stream.getTracks().forEach(track => track.stop()); this.stream = null; },
           onFrameProcessed: (_, frame) => {

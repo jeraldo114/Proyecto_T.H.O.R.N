@@ -6,6 +6,8 @@ export function rate(value) {
 /** Solo ordenes explicitas salen a la red; el modelo no decide destinos. */
 export function networkIntent(prompt) {
   const value = prompt.trim().replace(/^thorn[,:]?\s+/i, '');
+  const research = /^investiga(?: en (?:internet|la web))?\s+(?:sobre\s+)?(.+)$/iu.exec(value);
+  if (research) return { mode: 'search', value: research[1].trim(), investigate: true };
   const search = /^(?:busca|buscar|consulta|investiga)(?:\s+en)?\s+(?:internet|la web|wikipedia)\s+(?:sobre\s+)?(.+)$/iu.exec(value);
   if (search) return { mode: 'search', value: search[1].trim() };
   const read = /^(?:lee|leer|resume|resumir)(?:\s+esta\s+p[aá]gina)?\s+(https:\/\/\S+)$/iu.exec(value);

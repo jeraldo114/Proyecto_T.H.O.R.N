@@ -10,7 +10,7 @@ from typing import Any
 from core.runtime import ThornRuntime
 from core.speech_input import MAX_PCM_BYTES, TRANSCRIBE_PATH
 from core.sessions import authorize
-from core.documents import UPLOAD_PATH
+from core.documents import MAX_VISION_REQUEST_BYTES, UPLOAD_PATH, VISION_PATH
 from core.document_worker import MAX_PDF_BYTES
 
 logger = logging.getLogger(__name__)
@@ -53,8 +53,8 @@ class ThornASGI:
     async def _http(self, scope: ASGIScope, receive: Receive, send: Send) -> None:
         """Autoriza y limita antes de reservar buffers; solo recibe un PDF a la vez."""
         limit = self._max_request_bytes
-        is_document = scope.get("path") == UPLOAD_PATH and scope.get("method") == "POST"
-        if scope.get("path") in {TRANSCRIBE_PATH, UPLOAD_PATH} and scope.get("method") == "POST":
+        is_document = scope.get("path") in {UPLOAD_PATH, VISION_PATH} and scope.get("method") == "POST"
+        if scope.get("path") in {TRANSCRIBE_PATH, UPLOAD_PATH, VISION_PATH} and scope.get("method") == "POST":
             # NOTA DEL OPERADOR: autenticamos antes de reservar espacio para audio.
             # Un clip permitido tiene un limite distinto al de una peticion JSON.
             # No se amplian otros contratos ni se reciben clips sin autenticar.
@@ -66,7 +66,8 @@ class ThornASGI:
                             "headers": [(b"content-type", b"application/json")]})
                 await send({"type": "http.response.body", "body": json.dumps({"error": "insufficient_scope" if code == 403 else "unauthorized"}).encode()})
                 return
-            limit = MAX_PCM_BYTES if scope["path"] == TRANSCRIBE_PATH else MAX_PDF_BYTES
+            limit = {TRANSCRIBE_PATH: MAX_PCM_BYTES, UPLOAD_PATH: MAX_PDF_BYTES,
+                     VISION_PATH: MAX_VISION_REQUEST_BYTES}[scope["path"]]
         if is_document and self._document_busy:
             await send({"type": "http.response.start", "status": 503,
                         "headers": [(b"content-type", b"application/json")]})

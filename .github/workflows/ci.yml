@@ -52,7 +52,9 @@ jobs:
           THORN_TEST_START_SERVER: '1'
           THORN_TEST_URL: http://127.0.0.1:8009
           THORN_PYTHON: python
-        run: npm run test:e2e
+        run: |
+          npm run test:e2e
+          npm run test:ocr
       - name: Check committed files and history
         run: python tools/check_repository.py --history
       - name: Unit tests

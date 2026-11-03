@@ -19,9 +19,24 @@ const worklet = await build({ entryPoints: ['src/microphone-worklet.js'], bundle
 const files = Object.keys(result.metafile.outputs).map(file => basename(file));
 for (const name of ['pdf-viewer', 'map-viewer']) {
   await build({ entryPoints: [`src/${name}.js`], bundle: true, minify: true, outfile: `dist/${name}.js`,
-    format: 'esm', target: ['es2022'] });
+    format: 'esm', target: ['es2022'], external: ['/hud/assets/ocr.js'] });
   files.push(`${name}.js`);
 }
+await build({ entryPoints: ['src/ocr.js'], bundle: true, minify: true, outfile: 'dist/ocr.js',
+  format: 'esm', target: ['es2022'], plugins: [{ name: 'owned-ocr-worker', setup(builder) {
+    builder.onResolve({ filter: /^\.\/spawnWorker$/ }, args => {
+      if (args.importer.replaceAll('\\', '/').endsWith('/tesseract.js/src/worker/browser/index.js'))
+        return { path: resolve('src/ocr-worker-spawn.cjs') };
+    });
+  } }] });
+files.push('ocr.js');
+await copyFile('node_modules/tesseract.js/dist/worker.min.js', 'dist/ocr-worker.min.js'); files.push('ocr-worker.min.js');
+for (const name of await readdir('node_modules/tesseract.js-core')) {
+  if (!/^tesseract-core.*lstm\.wasm(\.js)?$/.test(name)) continue;
+  await copyFile(`node_modules/tesseract.js-core/${name}`, `dist/${name}`); files.push(name);
+}
+await copyFile('node_modules/@tesseract.js-data/spa/4.0.0/spa.traineddata.gz', 'dist/spa.traineddata.gz');
+files.push('spa.traineddata.gz');
 for (const name of ['pdf.worker.min.mjs', 'pdf.renderer.min.mjs']) {
   await copyFile(`node_modules/pdfjs-dist/build/${name}`, `dist/${name}`); files.push(name);
 }

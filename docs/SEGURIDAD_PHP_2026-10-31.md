@@ -95,4 +95,4 @@ Composer ni todos los servicios Windows. MySQL mantiene su listener previo;
 conviene revisar por separado acceso de red, usuario de minimo privilegio y
 actualizaciones del motor, con respaldo y prueba de restauracion de la base.
 
-El cifrado de T.H.O.R.N se trata en [Plan de cifrado](PLAN_DE_CIFRADO.md).
+El cifrado de T.H.O.R.N se trata en [Cifrado y respaldos](CIFRADO_Y_RESPALDOS.md).

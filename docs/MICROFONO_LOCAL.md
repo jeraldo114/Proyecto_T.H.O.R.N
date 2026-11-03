@@ -7,8 +7,10 @@ No usa Web Speech Recognition del navegador, ElevenLabs Speech to Text ni
 servicios externos. La salida predeterminada ahora es Piper local, sin creditos.
 Ver [Autonomia local](AUTONOMIA_LOCAL.md). ElevenLabs queda como compatibilidad opcional.
 
-Hay dictado por pulsacion y conversacion manos libres por turnos. No hay palabra
-de activacion. La transcripcion llega despues de terminar la captura, no es una
+Hay dictado por pulsacion y conversacion manos libres por turnos. La opción
+**Activar por «Thorn»** filtra la transcripción local y admite seguimientos
+durante 30 segundos. Ver [Memoria y fluidez](MEMORIA_Y_FLUIDEZ.md).
+La transcripcion llega despues de terminar la captura, no es una
 transcripcion progresiva. No se promete latencia fija ni precision perfecta.
 
 ## Usarlo

@@ -7,6 +7,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes, createHash } from 'node:crypto';
 import { chromium } from 'playwright';
+import { visibleCorePixels } from './core-pixels.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const url = process.env.THORN_TEST_URL || 'http://127.0.0.1:8002';
@@ -66,15 +67,7 @@ try {
 
   const source = await context.request.get(`${url}/api/v1/system/`, { headers: { Authorization: `Bearer ${token}` } }).then(response => response.json());
   assert(source.sensor.fresh && source.snapshot.memory_total_bytes > 0);
-  const pixels = await page.evaluate(() => {
-    const canvas = document.querySelector('#core-canvas');
-    const gl = canvas.getContext('webgl2');
-    const data = new Uint8Array(canvas.width * canvas.height * 4);
-    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, data);
-    let visible = 0;
-    for (let i = 0; i < data.length; i += 4) if (data[i + 3] > 20 && data[i] + data[i + 1] + data[i + 2] > 80) visible++;
-    return visible;
-  });
+  const pixels = await visibleCorePixels(page);
   assert(pixels > 1000, 'El canvas 3D no debe estar vacio.');
   const hash = async () => createHash('sha256').update(await page.locator('#core-canvas').screenshot()).digest('hex');
   const before = await hash(); await page.waitForTimeout(700); assert.notEqual(await hash(), before, 'El nucleo debe moverse.');
@@ -90,8 +83,13 @@ try {
   await page.waitForFunction(() => document.querySelector('#sample-state').textContent === 'MUESTRA VIGENTE');
   await page.locator('[data-view=system]').click();
   await page.locator('#diagnostic-button').click();
-  await page.waitForFunction(() => document.querySelector('#console-text').textContent.includes('aceptado'));
+  await page.waitForFunction(() => document.querySelector('#console-text').textContent.includes('Transcripción:') && document.querySelector('#console-text').textContent.includes('Síntesis:'));
   await page.locator('#close-console').click();
+  const event = await context.request.post(`${url}/api/v1/events/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { event_type: 'command.received', payload: { command: 'hud.e2e' } },
+  });
+  assert.equal(event.status(), 202);
   await page.locator('[data-view=activity]').click();
   await page.locator('#activity-filter').selectOption('command');
   await page.waitForFunction(() => document.querySelector('#activity-list').textContent.includes('Comando recibido'));

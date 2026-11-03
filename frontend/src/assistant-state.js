@@ -9,7 +9,7 @@ export function assistantState({ online, authenticated, playing, playbackState, 
   if (busy || conversation === 'thinking') return 'thinking';
   if (conversation === 'transcribing' || microphone === 'transcribing') return 'transcribing';
   if (conversation === 'hearing' || microphone === 'recording') return 'hearing';
-  if (conversation === 'listening') return 'listening';
+  if (['listening', 'waiting_for_wake'].includes(conversation)) return 'listening';
   if (conversation === 'loading') return 'initializing';
   return 'idle';
 }

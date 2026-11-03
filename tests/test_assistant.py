@@ -295,3 +295,27 @@ class ServiceLifecycleTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(await audit.load_setting("alerts"))
             with self.assertRaises(RuntimeError):
                 await audit.save_setting("alerts", {})
+
+
+class ProgressiveReplyTests(unittest.IsolatedAsyncioTestCase):
+    async def test_stream_decodes_fragments_and_keeps_action_structured(self) -> None:
+        parts = ['{"reply":"Primera frase. ', 'Siguiente \\u00', 'e1."',
+                 ',"suggested_action":null}']
+
+        def handle(request):
+            if request.url.path == "/api/tags":
+                return httpx.Response(200, json={"models": [{"name": "test:local"}]})
+            payload = json.loads(request.content)
+            self.assertTrue(payload["stream"])
+            return httpx.Response(200, content="".join(json.dumps({
+                "message": {"content": part}, "done": index == len(parts) - 1,
+            }) + "\n" for index, part in enumerate(parts)))
+
+        model = LocalLanguageModel(MemoryAudit(), endpoint="http://127.0.0.1:11434", model="test:local",
+                                   transport=httpx.MockTransport(handle))
+        self.addAsyncCleanup(model.stop)
+        fragments = []
+        result = await model.ask("Prueba", context={}, query_id="test", progress=fragments.append)
+        self.assertEqual("".join(fragments), result["reply"])
+        self.assertEqual(fragments[0], "Primera frase. ")
+        self.assertIsNone(result["suggested_action"])

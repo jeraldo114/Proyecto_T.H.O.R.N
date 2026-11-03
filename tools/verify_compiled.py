@@ -59,6 +59,13 @@ async def check_api(url: str) -> dict[str, object]:
                 raise ValueError('compiled_version_mismatch')
             if not caps['storage']['encrypted'] or caps['voice']['state'] != 'ready' or caps['microphone']['state'] != 'ready' or not caps['language']['available']:
                 raise ValueError('compiled_capabilities_incomplete')
+            if caps['operator']['memory']['state'] != 'disabled' or caps['operator']['memory']['retention'] != 'until_deleted':
+                raise ValueError('compiled_conversation_module_missing')
+            for asset in ('ocr.js', 'pdf-viewer.js', 'spa.traineddata.gz'):
+                response = await client.get('/hud/assets/' + asset); response.raise_for_status()
+                expected = await asyncio.to_thread((ROOT / 'frontend/dist' / asset).read_bytes)
+                if hashlib.sha256(response.content).digest() != hashlib.sha256(expected).digest():
+                    raise ValueError('compiled_ocr_assets_mismatch')
             voice = await client.post('/api/v1/voice/speech/', headers=headers,
                 json={'text': 'Verificación de voz local. Estoy listo para continuar.', 'cloud_consent': False})
             voice.raise_for_status()
@@ -93,9 +100,27 @@ async def check_api(url: str) -> dict[str, object]:
             follow.raise_for_status()
             if 'cedro' not in follow.json()['reply'].casefold() or follow.json()['context_messages'] != 4:
                 raise ValueError('compiled_context_failed')
+            first_text_ms = None
+            progressive_started = time.monotonic()
+            async with client.stream('POST', '/api/v1/chat/', headers={**headers, 'Accept': 'application/x-ndjson'},
+                                     json={'prompt': 'Describe en una frase breve qué es un circuito.'}) as streamed:
+                streamed.raise_for_status()
+                final = None
+                async for line in streamed.aiter_lines():
+                    event = json.loads(line)
+                    if 'delta' in event and first_text_ms is None:
+                        first_text_ms = round((time.monotonic() - progressive_started) * 1000)
+                    if 'result' in event:
+                        final = event['result']
+                if first_text_ms is None or not final or not final.get('reply'):
+                    raise ValueError('compiled_progressive_chat_failed')
             return {'compiled': True, 'encrypted_storage': True, 'voice_bytes': len(voice.content),
                 'stt': 'local_real_audio', 'model': caps['language']['model'], 'release': RELEASE,
                 'pdf_text': True, 'context_follow_up': True,
+                'local_ocr_assets': True, 'conversation_module': True,
+                 'first_text_ms': first_text_ms,
+                'transcription_ms': stt.json().get('transcription_ms'),
+                'synthesis_ms': float(voice.headers['X-Thorn-Synthesis-Ms']),
                 'chat_ms': round((time.monotonic() - start) * 1000), 'health_ms': health_ms}
         finally:
             if note_id:
@@ -115,6 +140,7 @@ def main() -> int:
                  'PYTHONHOME', 'PYTHONPATH', 'THORN_DATA_DIR'}
     environment = {key:value for key,value in os.environ.items() if key not in forbidden}
     environment['THORN_CONVERSATION_AUTO_START'] = '0'  # La prueba usa audio sintetico, no abre el microfono fisico.
+    environment['THORN_CONVERSATION_MEMORY'] = '0'  # No mezclar preguntas de prueba con el cuaderno real del operador.
     log_path = ROOT / '.artifacts/compiled-services.log'
     with tempfile.TemporaryDirectory(prefix='thorn-exe-test-', ignore_cleanup_errors=True) as working, log_path.open('wb') as log:
         process = subprocess.Popen([str(args.binary.resolve()), '--background', '--data-dir', str(root)],

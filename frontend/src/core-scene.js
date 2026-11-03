@@ -3,7 +3,7 @@ import * as THREE from 'three';
 /** Anillos de presencia. El pulso viene del audio real, nunca de valores aleatorios. */
 export function createCoreScene(canvas) {
   let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true }); }
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); }
   catch {
     document.querySelector('#webgl-fallback').hidden = false; canvas.hidden = true;
     return { setData() {}, setState() {}, setInputLevel() {}, setMotion() {}, setVoiceLevel() {}, dispose() {} };
@@ -61,7 +61,9 @@ export function createCoreScene(canvas) {
     frame = requestAnimationFrame(render);
     // NOTA DEL OPERADOR: presencia no es gastar la GPU sin control. 30 FPS y
     // pausa al ocultar; la rotacion es ornamental, el estado y el RMS son reales.
-    if (document.hidden || timestamp - lastFrame < 1000 / 30) return;
+    const activeAudio = voiceLevel > 0.005 || inputLevel > 0.005 || envelope > 0.005;
+    const fps = activeAudio ? 30 : !animation || reduced ? 2 : online && load > 0.7 ? 12 : 20;
+    if (document.hidden || timestamp - lastFrame < 1000 / fps) return;
     const delta = Math.min((timestamp - lastFrame) / 1000, 0.1); lastFrame = timestamp;
     if (animation && !reduced) {
       rings.rotation.z += delta * (state === 'thinking' ? 0.4 : online ? 0.075 + load * 0.04 : 0.025);

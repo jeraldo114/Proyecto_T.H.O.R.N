@@ -18,14 +18,17 @@ al código. Todavía está en desarrollo y hay bastante por mejorar.
 ## Qué hace por ahora
 
 - Conversa usando **Ollama y un perfil local de Qwen2.5 1.5B**. Conserva un
-  contexto corto para seguir el hilo entre preguntas de la misma sesión.
+  contexto corto y recupera conversaciones anteriores desde un archivo cifrado,
+  incluso después de desconectar o reiniciar el programa.
 - Tiene voz local con **Piper** y reconocimiento de voz con **Vosk**. La
   conversación funciona por turnos: cierra el micrófono mientras responde.
+  Puede esperar a que digas **«Thorn»** y permitir seguimientos durante 30 segundos.
 - Muestra hora, CPU, RAM, disco, procesos y actividad con datos del equipo.
   Si falta una lectura, lo indica.
 - Guarda notas, preferencias y auditoría en MySQL. Incluye cifrado para datos
   y secretos, respaldos recuperables y herramientas para firmar distribuciones.
 - Lee texto de PDF y permite ver el documento con páginas y zoom.
+  Si es un escaneo, **Leer página escaneada** reconoce su texto con OCR local.
 - Busca información y lugares con fuentes. Los mapas usan OpenStreetMap y
   requieren autorización para conectarse a Internet.
 - Incluye cámara local y gestos experimentales para mover elementos del HUD.
@@ -122,15 +125,57 @@ binarios generados se mantienen fuera de Git.
 
 ## Lo que sigo afinando
 
-Todavía estoy trabajando en la fluidez, el consumo de recursos y la utilidad
-de cada herramienta. Los gestos siguen siendo experimentales. El lector PDF
-extrae texto y muestra páginas; el modelo de texto no interpreta automáticamente
-los circuitos o imágenes que aparezcan en ellas. Tampoco hay OCR ni una palabra
-de activación para el micrófono.
+Sigo afinando la fluidez y el consumo. El núcleo reduce sus fotogramas cuando
+está en reposo y el OCR carga un solo worker cuando hace falta. Los gestos
+incluyen suavizado y una pinza sostenida para evitar movimientos accidentales;
+todavía dependen de la luz, la cámara y la posición de la mano.
 
-Las notas son memoria explícita, y el contexto de conversación es corto y
-temporal. La IA puede equivocarse. Las acciones de Windows conservan su
-confirmación independiente de lo que responda el modelo.
+El OCR reconoce texto impreso de la página elegida. Puede equivocarse y no
+convierte al modelo de texto en un experto que interpreta automáticamente
+circuitos, diagramas o imágenes. La activación por «Thorn» usa la transcripción
+local; necesita la sesión y el permiso del micrófono. No escucha con la ventana
+oculta ni intenta saltarse el primer permiso del navegador.
+
+**Órdenes para el día a día.** «Retoma el tema de cámaras» busca en el
+archivo cifrado, muestra la conversación de origen y la incorpora al contexto
+de la sesión. «Revisa el equipo» muestra telemetría y alertas locales.
+«Investiga sobre …» requiere autorización de Internet. Busca con el proveedor
+configurado e intenta leer hasta tres resultados públicos para resumirlos con
+fuentes. Wikipedia cubre temas enciclopédicos. La búsqueda web general usa el
+proveedor Brave ya previsto y requiere su clave y habilitarlo expresamente.
+
+**Conversación progresiva.** El texto aparece durante la generación. Con voz
+local automática, una frase completa puede empezar a sonar antes del final.
+Usa Escape para cancelar. Si activas la interrupción experimental antes de
+iniciar la conversación, di «Thorn, espera». El micrófono usa la cancelación
+de eco del navegador y durante la respuesta solo busca esa frase. Su eficacia
+depende del dispositivo, el volumen y la acústica. Diagnóstico muestra la
+última duración observada de transcripción, generación y síntesis.
+
+**Visión y razonamiento opcionales.** Define en el entorno privado
+`THORN_DOCUMENT_VISION_MODEL` con el nombre de un modelo visual instalado en
+Ollama. Luego abre un PDF y pulsa **Analizar imagen** en la página elegida.
+Puedes marcar **Recortar con el puntero** y arrastrar sobre un circuito para
+analizar solo esa región. El HUD muestra la imagen analizada, la página y
+el tiempo medido. Las conexiones de un
+circuito son estimaciones visuales. Para reservar un modelo mayor para
+consultas explícitas, define `THORN_REASONING_MODEL` y escribe
+`Analiza a fondo: …`. Ambos modelos opcionales se solicitan con liberación de
+memoria al finalizar. El visor y el razonador requieren pesos locales y una
+medición en el equipo antes de considerarlos listos para uso habitual.
+
+Las conversaciones completadas ahora se guardan automáticamente **si MySQL y
+el cifrado están disponibles**. Al reconectar, se recuperan turnos recientes y
+coincidencias de palabras y conceptos de un diccionario local del historial. El archivo conserva el texto completo,
+pero el modelo recibe extractos: recordar no equivale a cargar todo en RAM ni
+a garantizar que la IA recuerde cada detalle. Puedes buscarlo y borrarlo desde
+**Memoria e historial**. También puedes corregir la respuesta de un turno,
+buscar un tema y olvidar sus turnos seleccionados, y pausar o reanudar el guardado. El HUD muestra
+las fechas y los identificadores de los extractos entregados al modelo. Las notas explícitas siguen separadas y no se guarda audio.
+Lo hablado antes de esta mejora no se puede reconstruir si nunca se guardó.
+
+Dejé los controles y límites en [Memoria y fluidez](docs/MEMORIA_Y_FLUIDEZ.md).
+Las acciones de Windows siguen necesitando su confirmación independiente.
 
 ## Para no perderme entre las carpetas
 
@@ -159,11 +204,12 @@ npm test
 npm run build
 ```
 
-Bastion 9 cuenta con **202 pruebas de backend y 45 de módulos del frontend**,
+Bastion 9 cuenta con **221 pruebas de backend y 52 de módulos del frontend**,
 además de pruebas de los flujos del HUD. Pasarlas ayuda a encontrar errores;
 todavía queda probar el uso cotidiano en distintos equipos.
 
 Para profundizar están las [notas del proyecto](docs/NOTAS_DEL_PROYECTO.md),
+el [método para el coordinador local](docs/METODO_COORDINADOR_LOCAL.md),
 la [guía de seguridad](SECURITY.md) y los pasos de
 [publicación en GitHub](docs/PUBLICACION_GITHUB.md).
 

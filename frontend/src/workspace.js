@@ -42,7 +42,7 @@ export function operatorIntent(prompt) {
 export function localControl(prompt) {
   const value = prompt.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[¿?¡!.,;:]/g, ' ').trim().replace(/\s+/g, ' ')
     .replace(/^(?:thorn|t h o r n)\s+/u, '').replace(/\s+(?:por favor|gracias)$/u, '');
-  if (['silencio', 'detente', 'deten la respuesta', 'para de hablar', 'deja de hablar'].includes(value)) return 'stop';
+  if (['silencio', 'detente', 'deten la respuesta', 'para de hablar', 'deja de hablar', 'espera', 'parar respuesta'].includes(value)) return 'stop';
   if (['borra el contexto', 'olvida esta conversacion', 'limpia la conversacion'].includes(value)) return 'clear';
   return null;
 }

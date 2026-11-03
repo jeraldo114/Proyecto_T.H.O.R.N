@@ -1,5 +1,6 @@
 import { LocalCamera } from './camera.js';
 import { WorkspaceClient } from './workspace.js';
+import { ConversationArchive } from './conversation-archive.js';
 
 /** Herramientas reales: el escritorio puede mover sus controles sin duplicarlos. */
 export class OperatorTools {
@@ -22,7 +23,7 @@ export class OperatorTools {
       <h3>Mapas con fuente</h3><form id="b9-map-form"><label for="b9-place">Ciudad o lugar</label><input id="b9-place" maxlength="120" required><button class="command-button" type="submit">Buscar coordenadas y mapa</button></form><p>Usa la autorización de Internet de «Red e Internet». Las coordenadas provienen de artículos de Wikipedia; no se lee tu GPS.</p>
       <h3>Cámara y gestos locales</h3><label><input id="b9-camera-consent" type="checkbox"> Autorizo la cámara local durante esta sesión. Las imágenes no salen del navegador.</label><div class="b9-controls"><button class="command-button" id="b9-camera-start">Iniciar cámara</button><button class="command-button" id="b9-camera-stop">Apagar cámara</button><label><input type="checkbox" id="b9-gestures"> Seguimiento de manos (experimental)</label></div><video id="b9-video" muted playsinline hidden></video><p id="b9-vision-state" role="status">CÁMARA APAGADA</p><p id="b9-gesture-state" role="status"></p><p>Palma abierta durante 0,6 s para activar el cursor. Selecciona un resultado abajo y usa una pinza para actualizar su posición. Los gestos solo controlan resultados del HUD.</p>
       <h3>Resultados de esta sesión</h3><div id="b9-panels"></div>
-      <h3>Preferencias del operador</h3><form id="b9-preferences"><label for="b9-name">Cómo llamarte</label><input id="b9-name" maxlength="60"><label for="b9-zone">Zona horaria IANA</label><input id="b9-zone" value="America/Santiago" maxlength="80" required><label><input id="b9-welcome" type="checkbox" checked> Mostrar resumen al conectar</label><label><input id="b9-memory" type="checkbox" checked> Usar notas guardadas como contexto</label><button class="command-button" type="submit" id="b9-save-preferences">Guardar preferencias cifradas</button></form><p id="b9-operation" role="status"></p>`;
+      <h3>Preferencias del operador</h3><form id="b9-preferences"><label for="b9-name">Cómo llamarte</label><input id="b9-name" maxlength="60"><label for="b9-zone">Zona horaria IANA</label><input id="b9-zone" value="America/Santiago" maxlength="80" required><label><input id="b9-welcome" type="checkbox" checked> Mostrar resumen al conectar</label><label><input id="b9-memory" type="checkbox" checked> Usar notas y conversaciones archivadas como contexto</label><button class="command-button" type="submit" id="b9-save-preferences">Guardar preferencias cifradas</button></form><p id="b9-operation" role="status"></p>`;
     document.querySelector('#view-assistant').append(section);
     this.section = section;
     this.toolGroups = new Map();
@@ -39,6 +40,8 @@ export class OperatorTools {
     this.controls = [...section.querySelectorAll('button,input,select')];
     this.$ = selector => this.nodes.get(selector) || section.querySelector(selector);
     this.workspace = new WorkspaceClient((...args) => this.api(...args), panels => this.renderPanels(panels));
+    this.archive = new ConversationArchive({ host: document.querySelector('#view-history'), api: this.api,
+      active: this.active, onError: this.onError, cancel: cancelResponse });
     this.camera = new LocalCamera(this.$('#b9-video'), {
       onState: state => {
         const names = { off: 'CÁMARA APAGADA', requesting: 'ESPERANDO PERMISO', preview: 'VISTA LOCAL', tracking: 'SEGUIMIENTO LOCAL ACTIVADO', loading_model: 'CARGANDO DETECTOR LOCAL', permission_required: 'PERMISO DE CÁMARA REQUERIDO', device_lost: 'CÁMARA DESCONECTADA', camera_error: 'NO SE PUDO ABRIR LA CÁMARA', vision_error: 'SEGUIMIENTO NO DISPONIBLE', vision_timeout: 'EL DETECTOR NO RESPONDIÓ', vision_model_unavailable: 'DETECTOR DE MANOS NO DISPONIBLE', vision_inference_failed: 'NO SE PUDO PROCESAR LA IMAGEN' };
@@ -54,7 +57,7 @@ export class OperatorTools {
     this.$('#b9-clear').onclick = () => this.perform(async () => {
       await cancelResponse(); await this.api('conversation/reset', { method: 'POST', body: {} });
       this.accept({ reply: 'Contexto de esta conversación borrado.', ui_commands: [{ type: 'clear_context' }] }, { announce: false });
-      this.$('#b9-operation').textContent = 'Contexto y resultados de esta sesión borrados. Las notas guardadas se conservan.';
+      this.$('#b9-operation').textContent = 'Contexto y resultados de esta sesión borrados. Las conversaciones archivadas y las notas se conservan.';
     });
     this.$('#b9-document-form').onsubmit = event => {
       event.preventDefault(); void this.perform(() => this.upload());
@@ -95,6 +98,11 @@ export class OperatorTools {
     };
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.camera.stop(); });
     window.addEventListener('pagehide', () => this.camera.stop());
+    window.addEventListener('thorn-document-ocr', event => {
+      if (!this.active()) return;
+      if (event.detail.panel) this.workspace.accept(event.detail.panel);
+      this.showDocument();
+    });
   }
   async perform(work) {
     if (!this.active()) { this.onError(new Error('unauthorized')); return; }
@@ -129,11 +137,13 @@ export class OperatorTools {
     this.$('#b9-save-preferences').disabled = !enabled || !capabilities?.audit?.enabled;
     this.$('#b9-camera-start').disabled = !enabled || !this.capabilities?.camera_allowed;
     this.$('#b9-state').textContent = enabled ? 'SESIÓN LOCAL' : 'SIN SESIÓN';
+    this.archive.render(this.capabilities?.memory, enabled);
     if (!enabled && (this.camera.stream || this.camera.state === 'requesting')) this.camera.stop();
     if (enabled && this.capabilities) void this.connect();
   }
   accept(result, { announce = true } = {}) {
     if (!this.active()) return false;
+    this.archive.note(result);
     if (result.panel) this.workspace.accept(result.panel);
     let speak = true;
     for (const command of result.ui_commands || []) {
@@ -209,6 +219,7 @@ export class OperatorTools {
   }
   disconnect() {
     this.generation++; this.connected = false; this.camera.stop(); this.workspace.clear();
+    this.archive.disconnect();
     this.document = ''; this.dragPosition = null;
     this.controls.filter(input => input.tagName === 'INPUT').forEach(input => { if (input.type === 'checkbox') input.checked = false; else input.value = ''; });
     this.$('#b9-document-text').textContent = ''; this.$('#b9-operation').textContent = '';

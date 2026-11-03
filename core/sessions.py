@@ -124,12 +124,16 @@ class SessionAuthority:
 
 def required_scope(path: str, method: str) -> str:
     if path.startswith("/api/v1/documents/"):
-        return "documents:read" if method == "GET" or path.endswith("/ask/") else "documents:write"
+        return "documents:read" if method == "GET" or path.endswith(("/ask/", "/vision/")) else "documents:write"
     if path.startswith("/api/v1/preferences"):
         return "preferences:read" if method == "GET" else "preferences:write"
     if path.startswith("/api/v1/workspace"):
         return "workspace:read" if method == "GET" else "workspace:write"
     if path.startswith("/api/v1/conversation/"):
+        if path.endswith("/history/"):
+            return "memory:read"
+        if path.endswith(("/forget/", "/modify/")):
+            return "memory:write"
         return "assistant:chat"
     if path.startswith("/api/v1/maps/"):
         return "network:query"

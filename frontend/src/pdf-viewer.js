@@ -4,17 +4,136 @@ GlobalWorkerOptions.workerSrc = '/hud/assets/pdf.worker.min.mjs';
 GlobalWorkerOptions.rendererSrc = '/hud/assets/pdf.renderer.min.mjs';
 
 /** Visor local: canvas y workers, sin ejecutar acciones o JavaScript del PDF. */
-export function createPdfViewer(root, { id, credential, active, onError }) {
+export function createPdfViewer(root, { id, credential, active, onError, onOcr }) {
   const toolbar = document.createElement('div'); toolbar.className = 'viewer-toolbar';
   const previous = button('‹', 'Página anterior'), next = button('›', 'Página siguiente');
   const smaller = button('−', 'Reducir PDF'), larger = button('+', 'Ampliar PDF');
   const count = document.createElement('span'); count.textContent = 'Cargando documento local…';
   toolbar.append(previous, count, next, smaller, larger);
+  const ocrButton = button('Leer página escaneada', 'Reconocer texto de esta página con OCR local');
+  const cancelOcr = button('Cancelar lectura', 'Cancelar OCR'); cancelOcr.hidden = true;
+  toolbar.append(ocrButton, cancelOcr);
   const surface = document.createElement('div'); surface.className = 'pdf-surface';
   const message = document.createElement('p'); message.className = 'viewer-message';
-  root.append(toolbar, surface, message);
+  const evidence = document.createElement('figure'); evidence.hidden = true;
+  root.append(toolbar, surface, message, evidence);
   let pdf, loading, drawing, closing, pageNumber = 1, zoom = 1, disposed = false, visible = true, revision = 0, timer;
   const abort = new AbortController();
+  let ocrAbort, ocrDrawing;
+  const vision = button('Analizar imagen', 'Analizar esta página con el modelo visual local configurado');
+  const cropLabel = document.createElement('label');
+  const cropEnabled = document.createElement('input'); cropEnabled.type = 'checkbox';
+  cropLabel.append(cropEnabled, ' Recortar con el puntero'); toolbar.append(vision, cropLabel);
+  let crop, drag;
+  const point = event => {
+    const canvas = surface.querySelector('canvas[data-rendered="true"]');
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+  };
+  surface.addEventListener('pointerdown', event => {
+    if (!cropEnabled.checked || ocrAbort || event.button !== 0 || event.target.tagName !== 'CANVAS') return;
+    drag = point(event); if (drag) surface.setPointerCapture(event.pointerId);
+  });
+  surface.addEventListener('pointercancel', () => { drag = null; });
+  surface.addEventListener('pointerup', event => {
+    if (!drag) return;
+    const end = point(event), start = drag; drag = null;
+    if (!end) return;
+    const w = Math.abs(end.x - start.x), h = Math.abs(end.y - start.y);
+    crop = w >= 0.02 && h >= 0.02 ? { page: pageNumber, x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y), w, h } : null;
+    message.textContent = crop ? 'Recorte seleccionado. Pulsa Analizar imagen.' : 'Selecciona una zona más amplia.';
+  });
+  cropEnabled.onchange = () => { crop = null; drag = null; };
+  vision.onclick = async () => {
+    const canvas = surface.querySelector('canvas[data-rendered="true"]');
+    if (!canvas || !active() || ocrAbort) return;
+    const selected = pageNumber;
+    const region = cropEnabled.checked && crop?.page === selected ? crop : null;
+    if (cropEnabled.checked && !region) { message.textContent = 'Arrastra sobre la página para seleccionar el recorte.'; return; }
+    const controller = new AbortController(); ocrAbort = controller;
+    vision.disabled = true; cancelOcr.hidden = false;
+    message.textContent = 'Analizando imagen en el equipo…';
+    evidence.hidden = true; evidence.replaceChildren();
+    const sample = document.createElement('canvas');
+    try {
+      const { x, y, w, h } = region || { x: 0, y: 0, w: 1, h: 1 };
+      const width = canvas.width * w, height = canvas.height * h;
+      const scale = Math.min(1, 1280 / Math.max(width, height));
+      sample.width = Math.max(1, Math.round(width * scale)); sample.height = Math.max(1, Math.round(height * scale));
+      sample.getContext('2d').drawImage(canvas, canvas.width * x, canvas.height * y, width, height,
+        0, 0, sample.width, sample.height);
+      const image = sample.toDataURL('image/jpeg', 0.85);
+      const token = await credential();
+      const response = await fetch('/api/v1/documents/vision/', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, page: selected, image: image.split(',')[1] }),
+        cache: 'no-store', credentials: 'omit', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      if (!controller.signal.aborted && active()) {
+        message.textContent = `Página ${result.page} · ${result.elapsed_ms} ms · Estimación visual\n${result.reply}`;
+        const preview = document.createElement('canvas');
+        preview.width = Math.min(320, sample.width); preview.height = Math.max(1, Math.round(preview.width * sample.height / sample.width));
+        preview.getContext('2d').drawImage(sample, 0, 0, preview.width, preview.height);
+        const caption = document.createElement('figcaption'); caption.textContent = `${region ? "Recorte analizado" : "Imagen analizada"} · página ${selected}`;
+        evidence.replaceChildren(preview, caption); evidence.hidden = false;
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        message.textContent = ({ document_vision_unconfigured: 'Configura THORN_DOCUMENT_VISION_MODEL para usar visión local.',
+          document_vision_model_missing: 'El modelo visual configurado no está instalado en Ollama.' })[error.message] || 'No se pudo analizar esta página.';
+      }
+    } finally {
+      sample.width = sample.height = 0;
+      if (controller.signal.aborted && !disposed) message.textContent = 'Análisis cancelado.';
+      ocrAbort = null; vision.disabled = false; cancelOcr.hidden = true;
+    }
+  };
+  cancelOcr.onclick = () => { ocrAbort?.abort(); ocrDrawing?.cancel(); };
+  ocrButton.onclick = async () => {
+    if (!pdf || disposed || !visible || !active() || ocrAbort) return;
+    const controller = new AbortController(); ocrAbort = controller;
+    const selectedPage = pageNumber;
+    ocrButton.disabled = true; cancelOcr.hidden = false;
+    message.textContent = 'Preparando lectura local de esta página…';
+    let canvas;
+    try {
+      const page = await pdf.getPage(selectedPage), natural = page.getViewport({ scale: 1 });
+      if (controller.signal.aborted || disposed) return;
+      const scale = Math.min(2.1, Math.sqrt(2300000 / (natural.width * natural.height)));
+      const viewport = page.getViewport({ scale });
+      canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+      ocrDrawing = page.render({ canvas, viewport }); await ocrDrawing.promise;
+      const { localOcr } = await import('/hud/assets/ocr.js');
+      if (controller.signal.aborted || disposed) return;
+      const result = await localOcr.recognize(canvas, { signal: controller.signal,
+        onProgress: value => { if (!disposed && !controller.signal.aborted) message.textContent = `Leyendo página en tu PC… ${Math.round((value.progress || 0) * 100)} %`; } });
+      if (disposed || controller.signal.aborted || !active()) return;
+      if (!result.text) { message.textContent = 'No se detectó texto legible en esta página.'; return; }
+      const token = await credential();
+      if (disposed || controller.signal.aborted || !active()) return;
+      const response = await fetch('/api/v1/documents/ocr/', { method: 'POST', headers: {
+        Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, page: selectedPage, text: result.text, confidence: result.confidence }),
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]), credentials: 'omit', cache: 'no-store' });
+      const attached = await response.json();
+      if (!response.ok) throw new Error(attached.error || 'document_invalid_ocr');
+      if (disposed || controller.signal.aborted || !active()) return;
+      onOcr?.(attached);
+      message.textContent = `Texto reconocido en la página ${selectedPage}. Ya puedes preguntarle a T.H.O.R.N.${result.confidence < 75 ? ' Revisa el texto: la confianza es baja.' : ''}${result.truncated ? ' Se usó un extracto de 3000 caracteres.' : ''} OCR lee texto; no interpreta circuitos.`;
+    } catch (error) {
+      if (!disposed) message.textContent = controller.signal.aborted ? 'Lectura cancelada.' : 'No se pudo leer la página. Prueba con una imagen más nítida o revisa el límite de texto.';
+      if (!disposed && !controller.signal.aborted) onError?.(error);
+    } finally {
+      if (canvas) { canvas.width = canvas.height = 0; }
+      if (ocrAbort === controller) { ocrAbort = null; ocrDrawing = null; ocrButton.disabled = false; cancelOcr.hidden = true; }
+    }
+  };
   function release() {
     // PDF.js 6 libera documento, transporte y renderizador desde LoadingTask.
     // No invocar destroy() sobre PDFDocumentProxy ni destruir dos veces en una carrera.
@@ -51,8 +170,8 @@ export function createPdfViewer(root, { id, credential, active, onError }) {
       }
     }
   }
-  previous.onclick = () => { if (pageNumber > 1) { pageNumber--; void render(); } };
-  next.onclick = () => { if (pdf && pageNumber < pdf.numPages) { pageNumber++; void render(); } };
+  previous.onclick = () => { if (!ocrAbort && pageNumber > 1) { pageNumber--; void render(); } };
+  next.onclick = () => { if (!ocrAbort && pdf && pageNumber < pdf.numPages) { pageNumber++; void render(); } };
   smaller.onclick = () => { zoom = Math.max(0.5, zoom - 0.25); void render(); };
   larger.onclick = () => { zoom = Math.min(2, zoom + 0.25); void render(); };
   const host = root.closest('.floating-content') || root;
@@ -77,7 +196,9 @@ export function createPdfViewer(root, { id, credential, active, onError }) {
       if (data.byteLength > 8 * 1024 * 1024) throw new Error('document_size_limit');
       loading = getDocument({ data, isEvalSupported: false, enableXfa: false,
         cMapUrl: '/hud/assets/', cMapPacked: true, standardFontDataUrl: '/hud/assets/',
-        wasmUrl: '/hud/assets/', maxImageSize: 4 * 1024 * 1024, canvasMaxAreaInBytes: 16 * 1024 * 1024,
+        // Un escaneo A4 de 300 dpi suele superar 4 MP. Admitimos hasta 12 MP
+        // de origen; el canvas y la entrada OCR conservan sus propios límites.
+        wasmUrl: '/hud/assets/', maxImageSize: 12 * 1024 * 1024, canvasMaxAreaInBytes: 16 * 1024 * 1024,
         useSystemFonts: true, useWorkerFetch: true });
       const limit = setTimeout(() => { if (!pdf) { void release(); message.textContent = 'El visor superó el tiempo de carga.'; } }, 15000);
       try { pdf = await loading.promise; } finally { clearTimeout(limit); }
@@ -88,8 +209,9 @@ export function createPdfViewer(root, { id, credential, active, onError }) {
     }
   })();
   return {
-    visible(value) { visible = value; if (!value) { revision++; drawing?.cancel(); } else void render(); },
+    visible(value) { visible = value; if (!value) { revision++; drawing?.cancel(); ocrAbort?.abort(); ocrDrawing?.cancel(); } else void render(); },
     dispose() { disposed = true; revision++; abort.abort(); drawing?.cancel(); clearTimeout(timer); observer.disconnect();
+      ocrAbort?.abort(); ocrDrawing?.cancel();
       void release(); surface.replaceChildren(); },
   };
 }

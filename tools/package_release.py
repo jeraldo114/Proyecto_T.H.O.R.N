@@ -58,7 +58,9 @@ def notices(directory: Path) -> None:
     target = directory / 'licenses/Python'; target.mkdir(exist_ok=True)
     shutil.copyfile(python_license, target / 'LICENSE.txt')
     node_root = ROOT / 'frontend/node_modules'
-    for name in ('@fontsource/chakra-petch', 'lucide', 'three', '@ricky0123/vad-web', 'onnxruntime-web', '@mediapipe/tasks-vision', 'pdfjs-dist', 'leaflet'):
+    for name in ('@fontsource/chakra-petch', 'lucide', 'three', '@ricky0123/vad-web', 'onnxruntime-web', '@mediapipe/tasks-vision', 'pdfjs-dist', 'leaflet',
+                 'tesseract.js', 'tesseract.js-core', '@tesseract.js-data/spa', 'bmp-js', 'idb-keyval', 'is-url',
+                 'node-fetch', 'regenerator-runtime', 'wasm-feature-detect', 'zlibjs'):
         metadata = json.loads((node_root / name / 'package.json').read_text(encoding='utf-8'))
         target = directory / 'licenses' / re.sub('[^a-z0-9_.-]', '_', name); target.mkdir(exist_ok=True)
         for source in (node_root / name).glob('*'):
@@ -91,6 +93,12 @@ def notices(directory: Path) -> None:
             shutil.copyfile(cached, target / 'LICENSE.txt')
             components.append({'name': name, 'notice_source': url, 'notice_sha256': hashlib.sha256(cached.read_bytes()).hexdigest()})
     hand_model = directory / 'frontend/dist/hand_landmarker.task'
+    ocr_model = directory / 'frontend/dist/spa.traineddata.gz'
+    if ocr_model.is_file():
+        components.append({'name': 'Spanish OCR traineddata (Tesseract)', 'license': 'Apache-2.0',
+            'sha256': hashlib.sha256(ocr_model.read_bytes()).hexdigest(),
+            'source': 'https://github.com/naptha/tessdata',
+            'upstream_source': 'https://github.com/tesseract-ocr/tessdata'})
     if hand_model.is_file():
         components.append({'name': 'MediaPipe Hand Landmarker (float16)', 'license': 'Apache-2.0',
             'sha256': hashlib.sha256(hand_model.read_bytes()).hexdigest(),

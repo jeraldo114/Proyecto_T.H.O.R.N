@@ -26,6 +26,8 @@ class LocalBrainHost:
                     return False
             if await ready():
                 return True
+            if self.process is not None and self.process.returncode is None:
+                await self.stop()
             if os.name != "nt":
                 return False
             executable = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"

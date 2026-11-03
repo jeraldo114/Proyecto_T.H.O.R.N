@@ -39,6 +39,7 @@ export class LocalCamera {
       if (event.data.type === 'ready') {
         clearTimeout(this.loadTimer); this.notify('tracking'); this.schedule(revision);
       } else if (event.data.type === 'result') {
+        clearTimeout(this.frameTimer);
         this.busy = false;
         this.onGesture(this.gesture.update(event.data.landmarks, event.data.timestamp));
         this.schedule(revision);
@@ -56,6 +57,9 @@ export class LocalCamera {
     if (this.video.readyState < 2) { this.schedule(revision); return; }
     this.busy = true;
     const worker = this.worker;
+    this.frameTimer = setTimeout(() => {
+      if (revision === this.revision && worker === this.worker) this.stopGestures('vision_timeout');
+    }, 2500);
     try {
       const image = await this.createImage(this.video);
       if (revision !== this.revision || worker !== this.worker) { image.close(); return; }
@@ -63,7 +67,7 @@ export class LocalCamera {
     } catch { if (revision === this.revision) this.stopGestures('vision_error'); }
   }
   stopGestures(state = 'preview') {
-    clearTimeout(this.timer); clearTimeout(this.loadTimer);
+    clearTimeout(this.timer); clearTimeout(this.loadTimer); clearTimeout(this.frameTimer);
     this.worker?.terminate(); this.worker = null; this.busy = false;
     this.gesture.reset(); this.onGesture({ state: 'off', dragging: false });
     if (this.stream) this.notify(state);

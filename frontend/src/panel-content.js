@@ -27,14 +27,18 @@ export function mountPanelContent(panel, root, services) {
     const tools = document.createElement('div'); tools.className = 'viewer-toolbar'; root.append(tools);
     const pdf = document.createElement('div'); pdf.className = 'pdf-viewer';
     const extracted = document.createElement('pre'); extracted.className = 'document-extracted'; extracted.hidden = true;
-    extracted.textContent = (data.pages || []).map(page => `[Página ${page.page}]\n${page.text}`).join('\n\n') || 'Este documento no contiene texto extraíble. OCR no habilitado.';
+    extracted.textContent = (data.pages || []).map(page => `[Página ${page.page}]\n${page.text}`).join('\n\n') || 'Sin texto extraíble. Usa «Leer página escaneada» para reconocer el texto localmente.';
     button('Documento', () => { pdf.hidden = false; extracted.hidden = true; controller?.visible(visible); }, tools);
     button('Texto', () => { pdf.hidden = true; extracted.hidden = false; controller?.visible(false); }, tools);
     button('Preguntar', () => services.onTool('documents', { documentId: data.id }), tools);
     button('Descargar', () => services.onDownload(data.id), tools);
     root.append(pdf, extracted);
     void import('/hud/assets/pdf-viewer.js').then(module => {
-      if (!disposed) attach(module.createPdfViewer(pdf, { id: data.id, credential: services.credential, active: services.active, onError: services.onError }));
+      if (!disposed) attach(module.createPdfViewer(pdf, { id: data.id, credential: services.credential, active: services.active, onError: services.onError,
+        onOcr: result => {
+          extracted.textContent = result.document.pages.map(page => `[Página ${page.page}]\n${page.text}`).join('\n\n');
+          window.dispatchEvent(new CustomEvent('thorn-document-ocr', { detail: result }));
+        } }));
     }).catch(() => { if (!disposed) { pdf.hidden = true; extracted.hidden = false; text('Visor no disponible. Se muestra el texto extraído.'); } });
   } else if (panel.kind === 'system' || panel.kind === 'briefing') {
     if (data.local_time) text(new Date(data.local_time).toLocaleString('es-CL', { timeZone: data.timezone }), 'briefing-time');

@@ -24,7 +24,9 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             copy = runtime.activity
             copy[0]["source"] = "changed"
             self.assertEqual(runtime.activity[0]["source"], "test")
-            self.assertGreater(runtime.uptime_seconds, 0)
+            # En Windows este turno puede terminar dentro del mismo tick del reloj.
+            self.assertEqual(runtime.state, RuntimeState.RUNNING)
+            self.assertGreaterEqual(runtime.uptime_seconds, 0)
 
     async def test_sensor_stops_before_shutdown_event_and_database(self) -> None:
         order: list[str] = []
