@@ -151,10 +151,10 @@ class InternetService:
             else:
                 await self._record(operation, "completed", identity)
 
-    async def search(self, query: str, *, consent: bool, identity: str) -> dict[str, Any]:
+    async def search(self, query: str, *, consent: bool, identity: str, investigate: bool = False) -> dict[str, Any]:
         if not isinstance(query, str) or not query.strip() or len(query) > 240 or any(ord(char) < 32 for char in query):
             raise ValueError("web_invalid_query")
-        async with self.operation("search", consent, identity):
+        async with self.operation("research" if investigate else "search", consent, identity):
             if self.provider == "brave":
                 if self.paid_search_blocked:
                     raise RuntimeError("web_paid_provider_blocked")
@@ -197,6 +197,19 @@ class InternetService:
                 excerpt = clean(item.get("description") if self.provider == "brave" else item.get("extract"), 700)
                 if title:
                     sources.append({"title": title, "url": safe_url, "excerpt": excerpt, "retrieved_at": stamp, "kind": "search"})
+            if investigate:
+                # Solo URLs devueltas por el proveedor; el cliente vuelve a validar DNS y cada redirección.
+                async def enrich(source: dict[str, Any]) -> None:
+                    try:
+                        raw, mime, final = await self.client.get(source["url"])
+                        title, content = await asyncio.to_thread(extract_page, raw, mime)
+                    except (RuntimeError, ValueError, OSError, TimeoutError, httpcore.NetworkError,
+                            httpcore.ProtocolError, httpcore.TimeoutException):
+                        return
+                    if content:
+                        source.update(title=title or source["title"], url=final,
+                                      excerpt=content[:1400], kind="page")
+                await asyncio.gather(*(enrich(source) for source in sources))
             return {"sources": sources, "provider": self.provider, "retrieved_at": stamp,
                     "request_id": identity, "truncated": len(results) > 3}
 

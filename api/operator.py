@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import secrets
 from urllib.parse import unquote
 
@@ -183,7 +185,8 @@ async def conversation_history(request: ASGIRequest, services: AssistantServices
             raise ValueError("invalid_conversation_page") from None
         query = ""
     result = await services.conversations.page(before=before, limit=limit, query=query)
-    response = JsonResponse({**result, "memory": services.conversations.status})
+    response = JsonResponse({**result, "memory": services.conversations.status,
+                             "recording_paused": await services.conversations.recording_paused()})
     response["Cache-Control"] = "no-store"
     return response
 
@@ -197,3 +200,44 @@ async def forget_conversations(request: ASGIRequest, services: AssistantServices
     for owner in list(services.operator.store.states):
         services.operator.store.cancel(owner, clear=True)
     return JsonResponse({"deleted": count, "scope": "local_operator", "notes_preserved": True})
+
+
+@require_POST
+@private
+async def modify_conversation(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
+    data = body(request, {"operation"}, optional={"id", "correction", "selected", "confirmation"})
+    operation = data["operation"]
+    if operation == "delete_selected" and data.get("confirmation") != "OLVIDAR SELECCIÓN":
+        raise ValueError("conversation_delete_confirmation_required")
+    await services.conversations.modify(operation=operation, turn_id=data.get("id"),
+                                        correction=data.get("correction"), selected=data.get("selected"))
+    if operation in {"delete", "correct", "delete_selected"}:
+        for owner in list(services.operator.store.states):
+            services.operator.store.cancel(owner, clear=True)
+    return JsonResponse({"updated": True})
+
+
+@require_POST
+@private
+async def vision_document(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
+    import base64
+    import binascii
+    data = body(request, {"id", "page", "image"})
+    owner, scopes = principal(request)
+    if "assistant:chat" not in scopes:
+        return JsonResponse({"error": "insufficient_scope"}, status=403)
+    if not isinstance(data["id"], str):
+        raise ValueError("document_not_found")
+    document = services.operator.documents.get(owner, data["id"])
+    page, image = data["page"], data["image"]
+    if type(page) is not int or not 1 <= page <= document.result["page_count"]:
+        raise ValueError("document_invalid_page")
+    if not isinstance(image, str) or not 1 <= len(image) <= 1400000:
+        raise ValueError("document_invalid_image")
+    try:
+        raw = await asyncio.to_thread(base64.b64decode, image, validate=True)
+    except (ValueError, binascii.Error):
+        raise ValueError("document_invalid_image") from None
+    if not raw.startswith(b"\xff\xd8\xff") or not raw.endswith(b"\xff\xd9"):
+        raise ValueError("document_invalid_image")
+    return JsonResponse(await services.operator.run(owner, lambda: services.language.analyze_page(image, page)))

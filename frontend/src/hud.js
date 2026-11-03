@@ -60,6 +60,13 @@ const conversation = new ConversationLoop({
   onState: () => { renderConversation(); text('#microphone-result', $('#conversation-state').textContent); renderMicrophone(); renderVoice(); },
   onLevel: ({ level, seconds }) => { scene.setInputLevel(level); $('#microphone-level').value = level; text('#microphone-time', `${seconds.toFixed(1)} / 15 s`); },
   onText: value => { $('#microphone-text').value = value; },
+  onInterrupt: () => {
+    const generation = authRevision;
+    void cancelActiveResponse().then(async () => {
+      if (chatBusy) await new Promise(resolve => setTimeout(resolve, 250));
+      if (generation === authRevision && !document.hidden && !paused) await startConversation();
+    }).catch(() => {});
+  },
   transcribe: (pcm, signal) => transcribePcm(pcm, token, signal),
   ask: (prompt, signal) => { conversationVoiceSettings = { automatic: $('#voice-auto').checked, revision: autoVoiceRevision }; return askModel(prompt, signal); },
   speak: async (reply, signal) => {
@@ -77,6 +84,10 @@ const operatorTools = new OperatorTools({
   canPresent: () => !chatBusy,
   onReply: (result, { announce }) => {
     consoleReply(result.reply);
+    if (result.memory_sources?.length) {
+      const references = result.memory_sources.map(item => `#${item.id} · ${new Date(item.date).toLocaleString('es-CL')} · ${item.category}`);
+      text('#console-text', `${result.reply}\n\nConversaciones consultadas en Historial\n${references.join('\n')}`);
+    }
     if (result.memory?.available && !result.memory.saved) toast('La respuesta está lista, pero este turno no se guardó en la memoria permanente.');
     proposedAction = result.suggested_action || null;
     $('#suggested-action-button').hidden = !proposedAction || !capabilities?.actions.enabled;
@@ -291,7 +302,7 @@ async function poll() {
 }
 function disconnect() {
   revision++; authRevision++;
-  chatAbort?.abort(); operatorTools.disconnect();
+  chatAbort?.abort(); Object.keys(timings).forEach(key => delete timings[key]); operatorTools.disconnect();
   sessions.close(); voiceDefaultKey = '';
   cancelWeb(); $('#internet-consent').checked = false; networkData = null; networkReceived = 0;
   $('#web-input').value = ''; $('#web-sources').replaceChildren(); text('#web-result', ''); text('#network-probe-result', 'SIN PRUEBA EXTERNA');
@@ -484,6 +495,8 @@ function renderConversation() {
   $('#conversation-enabled').disabled = !token || !online || paused || !capabilities?.microphone.available || !PcmMicrophone.supported();
   $('#conversation-stop').disabled = !conversation.enabled;
   $('#conversation-wake').disabled = conversation.enabled;
+  $('#conversation-barge').disabled = conversation.enabled || !navigator.mediaDevices?.getSupportedConstraints?.().echoCancellation;
+  if (conversation.interruptOnly) { states.speaking = 'Respuesta / escucha de interrupción local'; states.thinking = 'Consultando / escucha de interrupción local'; }
   $('#conversation-bar').dataset.state = conversation.state;
   text('#conversation-state', states[conversation.state] || states.off);
   if (conversation.enabled) text('#microphone-result', states[conversation.state] || states.off);
@@ -501,6 +514,7 @@ async function startConversation() {
   conversationAutoAttempted = true;
   cancelMicrophone(); stopSpeech();
   conversation.requireWake = $('#conversation-wake').checked;
+  conversation.bargeIn = $('#conversation-barge').checked && Boolean(navigator.mediaDevices.getSupportedConstraints?.().echoCancellation);
   await conversation.start($('#microphone-device').value);
 }
 $('#conversation-enabled').addEventListener('change', event => { conversationAutoAttempted = true; if (event.target.checked) void startConversation(); else stopConversation(); });
@@ -516,7 +530,38 @@ async function transcribePcm(pcm, credential, signal) {
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'microphone_transcription_failed');
   if (typeof result.text !== 'string' || result.text.length > 2000 || result.cloud !== false) throw new Error('microphone_transcription_failed');
+  timings.transcription = result.transcription_ms;
   return result.text;
+}
+
+const timings = {};
+async function streamChat(prompt, signal, onDelta) {
+  const credential = await currentCredential();
+  const response = await fetch('/api/v1/chat/', {
+    method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+    body: JSON.stringify({ prompt }), cache: 'no-store', credentials: 'omit',
+    signal: AbortSignal.any([signal, AbortSignal.timeout(70000)]),
+  });
+  if (!response.ok) throw new Error((await response.json()).error || 'service_unavailable');
+  if (!response.headers.get('content-type')?.startsWith('application/x-ndjson')) return response.json();
+  const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+  let pending = '';
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error('model_query_failed');
+      pending += value;
+      if (pending.length > 262144) throw new Error('model_query_failed');
+      let end;
+      while ((end = pending.indexOf('\n')) >= 0) {
+        const event = JSON.parse(pending.slice(0, end));
+        pending = pending.slice(end + 1);
+        if (event.error) throw new Error(event.error);
+        if (event.result) { timings.generation = event.result.elapsed_ms; return event.result; }
+        if (typeof event.delta === 'string') onDelta(event.delta);
+      }
+    }
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
 async function askModel(prompt, signal, intent = operatorIntent(prompt) || networkIntent(prompt)) {
@@ -533,9 +578,35 @@ async function askModel(prompt, signal, intent = operatorIntent(prompt) || netwo
   if (controller) { webController = controller; text('#web-result', 'CONSULTANDO / INTERNET'); updateNetwork(); }
   const outputRevision = replyRevision;
   try {
-    const body = intent ? { internet_consent: true, ...(['search', 'map'].includes(intent.mode) ? { query: intent.value } : intent.mode === 'read' ? { url: intent.value } : {}) } : { prompt };
+    const body = intent ? { internet_consent: true, ...(['search', 'map'].includes(intent.mode) ? { query: intent.value, ...(intent.investigate ? { investigate: true } : {}) } : intent.mode === 'read' ? { url: intent.value } : {}) } : { prompt };
     const route = intent ? intent.mode === 'map' ? 'maps/lookup' : intent.mode === 'diagnose' ? 'network/diagnose' : `web/${intent.mode}` : 'chat';
-    const reply = await api(route, { method: 'POST', body, timeout: intent ? 90000 : 70000, signal: activeSignal });
+    let partial = '', spokenUntil = 0, audio = Promise.resolve();
+    const voiceRevision = autoVoiceRevision;
+    const auto = $('#voice-auto').checked && capabilities?.voice.can_request && !capabilities.voice.cloud && playback.volume > 0;
+    const queueSpeech = value => {
+      audio = audio.then(async () => {
+        if (activeSignal.aborted || generation !== authRevision || voiceRevision !== autoVoiceRevision) return;
+        await speakText(value, { automatic: true });
+        if (playback.state === 'blocked') { stopSpeech(); setSpeechMessage('Audio bloqueado. Pulsa el botón de lectura para oír la respuesta.'); }
+        else if (playback.active) await playback.finished;
+      });
+    };
+    const reply = intent ? await api(route, { method: 'POST', body, timeout: 90000, signal: activeSignal })
+      : await streamChat(prompt, activeSignal, delta => {
+        if (activeSignal.aborted || generation !== authRevision || outputRevision !== replyRevision) return;
+        partial += delta;
+        text('#console-text', partial);
+        if (!auto) return;
+        const sentence = /^(.*?[.!?])\s+/su.exec(partial.slice(spokenUntil));
+        if (sentence && sentence[1].trim().length >= 16) {
+          queueSpeech(sentence[1].trim()); spokenUntil += sentence[0].length;
+        }
+      });
+    if (spokenUntil) {
+      const tail = reply.reply.slice(spokenUntil).trim();
+      if (tail) queueSpeech(tail);
+      await audio;
+    }
     if (activeSignal?.aborted || generation !== authRevision || outputRevision !== replyRevision || intent && internetGeneration !== webRevision) return '';
     if (intent?.mode === 'diagnose') {
       reply.reply = `Prueba HTTPS a example.com completada.\nDNS: ${reply.dns_ms} ms\nSolicitud HTTPS: ${reply.https_ms} ms\nMedido: ${new Date(reply.checked_at).toLocaleString('es-CL')}\nEs una prueba de ese destino, no una medición ICMP ni de todo Internet.`;
@@ -548,9 +619,11 @@ async function askModel(prompt, signal, intent = operatorIntent(prompt) || netwo
     }
     proposedAction = reply.suggested_action;
     $('#suggested-action-button').hidden = !proposedAction || !capabilities?.actions.enabled;
-    return shouldSpeak ? reply.reply : '';
+    return shouldSpeak && !spokenUntil ? reply.reply : '';
   } catch (error) {
-    if (!activeSignal?.aborted && generation === authRevision && outputRevision === replyRevision) { consoleReply(serviceError(error)); if (intent) text('#web-result', serviceError(error)); }
+    const wasAborted = activeSignal.aborted;
+    requestController.abort();
+    if (!wasAborted && generation === authRevision && outputRevision === replyRevision) { consoleReply(serviceError(error)); if (intent) text('#web-result', serviceError(error)); }
     throw error;
   } finally { if (chatAbort === requestController) chatAbort = null; if (webController === controller) webController = null; chatBusy = false; updateNetwork(); renderDesktop(); }
 }
@@ -628,6 +701,7 @@ async function speakText(value, { automatic = false } = {}) {
     });
     if (!response.ok) throw new Error((await response.json()).error || 'voice_provider_unavailable');
     if (!response.headers.get('content-type')?.startsWith(voice.cloud ? 'audio/mpeg' : 'audio/wav')) throw new Error('voice_invalid_audio');
+    timings.synthesis = Number(response.headers.get('X-Thorn-Synthesis-Ms') ?? NaN);
     const blob = await response.blob();
     if (generation !== speechRevision || session !== authRevision) return;
     if (!blob.size || blob.size > (voice.cloud ? 2 : 8) * 1024 * 1024) throw new Error('voice_invalid_audio');
@@ -894,8 +968,13 @@ $('#diagnostic-button').addEventListener('click', async () => {
   if (!token) { toast('Conecta la sesión privada'); return; }
   $('#diagnostic-button').disabled = true;
   try {
-    const data = await api('events', { method: 'POST', body: { event_type: 'command.received', payload: { command: 'hud.diagnostic' }, correlation_id: crypto.randomUUID() } });
-    consoleReply(`Evento de diagnóstico aceptado por el bus.\nID: ${data.event_id}\nConfirmación: encolado, no ejecución de una acción OS.`);
+    const data = await api('capabilities');
+    const ms = key => Number.isFinite(timings[key]) ? `${timings[key]} ms` : 'Sin muestra';
+    const advice = [data.language.state === 'engine_unavailable' && 'Comprueba Ollama y vuelve a ejecutar Diagnóstico.',
+      data.language.state === 'model_missing' && 'Comprueba el perfil instalado en Ollama.',
+      conversation.state === 'device_lost' && 'Selecciona un micrófono disponible y reactiva Conversación.',
+      data.voice.state === 'voice_model_missing' && 'Comprueba el modelo de voz local.'].filter(Boolean);
+    consoleReply(`Ollama: ${data.language.state}\nMicrófono: ${data.microphone.state} · ${conversation.state}\nVoz: ${data.voice.state}\nTranscripción: ${ms('transcription')}\nGeneración: ${ms('generation')}\nSíntesis: ${ms('synthesis')}${advice.length ? '\n\n' + advice.join('\n') : ''}`);
     await poll();
   } catch { toast('No se pudo publicar el diagnóstico'); }
   finally { $('#diagnostic-button').disabled = false; }

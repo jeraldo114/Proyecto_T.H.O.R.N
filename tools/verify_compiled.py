@@ -100,10 +100,27 @@ async def check_api(url: str) -> dict[str, object]:
             follow.raise_for_status()
             if 'cedro' not in follow.json()['reply'].casefold() or follow.json()['context_messages'] != 4:
                 raise ValueError('compiled_context_failed')
+            first_text_ms = None
+            progressive_started = time.monotonic()
+            async with client.stream('POST', '/api/v1/chat/', headers={**headers, 'Accept': 'application/x-ndjson'},
+                                     json={'prompt': 'Describe en una frase breve qué es un circuito.'}) as streamed:
+                streamed.raise_for_status()
+                final = None
+                async for line in streamed.aiter_lines():
+                    event = json.loads(line)
+                    if 'delta' in event and first_text_ms is None:
+                        first_text_ms = round((time.monotonic() - progressive_started) * 1000)
+                    if 'result' in event:
+                        final = event['result']
+                if first_text_ms is None or not final or not final.get('reply'):
+                    raise ValueError('compiled_progressive_chat_failed')
             return {'compiled': True, 'encrypted_storage': True, 'voice_bytes': len(voice.content),
                 'stt': 'local_real_audio', 'model': caps['language']['model'], 'release': RELEASE,
                 'pdf_text': True, 'context_follow_up': True,
                 'local_ocr_assets': True, 'conversation_module': True,
+                 'first_text_ms': first_text_ms,
+                'transcription_ms': stt.json().get('transcription_ms'),
+                'synthesis_ms': float(voice.headers['X-Thorn-Synthesis-Ms']),
                 'chat_ms': round((time.monotonic() - start) * 1000), 'health_ms': health_ms}
         finally:
             if note_id:

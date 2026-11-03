@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -10,7 +11,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from .commands import command_intent, normalize
+from .commands import coordinate, normalize
 from .documents import DocumentService
 from .interaction import InteractionState, InteractionStore
 from .maps import find_places
@@ -109,6 +110,35 @@ class OperatorServices:
 
     async def command(self, owner: str, intent: dict[str, str], scopes: frozenset[str]) -> dict[str, object]:
         kind = intent["type"]
+        if kind == "resume_topic":
+            if "memory:read" not in scopes:
+                raise ValueError("command_scope_required")
+            if not self.preferences.value["memory_context_enabled"]:
+                return self.result("Activa el uso de recuerdos como contexto en Preferencias para retomar un tema.")
+            rows = (await self.services.conversations.page(query=intent["topic"], limit=3))["records"]
+            if not rows:
+                return self.result("No encontré conversaciones archivadas sobre ese tema.")
+            latest = rows[0]
+            state = self.store.state(owner, touch=True)
+            self.store.remember(owner, state, latest["prompt"], latest["reply"])
+            return self.result(
+                f"Retomamos desde el turno #{latest['id']}. Me dijiste: {latest['prompt'][:320]}\n"
+                f"Mi última respuesta fue: {latest['reply'][:700]}\n¿Con qué parte seguimos?",
+                memory_sources=[{"id": item["id"], "date": item["created_at"], "category": item["category"]}
+                                for item in rows])
+        if kind == "system_review":
+            if "telemetry:read" not in scopes:
+                raise ValueError("command_scope_required")
+            context = self.services.context()
+            telemetry = context["telemetry"]
+            if not context["telemetry_fresh"] or not isinstance(telemetry, dict):
+                return self.result("Revisión local: falta una muestra vigente de telemetría.")
+            disk = telemetry.get("disk_free_bytes")
+            free = f"{disk / 1024**3:.1f} GiB libres" if isinstance(disk, (int, float)) else "sin lectura"
+            return self.result(f"Revisión local. CPU {telemetry['cpu_percent']:g} %. "
+                               f"RAM {telemetry['memory_percent']:g} %. Disco: {free}. "
+                               f"Alertas activas: {len(context['active_alerts'])}.",
+                               panel=self.store.add_panel(owner, "system", "Revisión local del equipo", context))
         if kind == "clear_context":
             self.store.cancel(owner, clear=True)
             self.documents.release(owner)
@@ -132,16 +162,19 @@ class OperatorServices:
                 return self.result(intent["reply"], panel=panel, commands=[{"type": "navigate", "view": "system"}])
         return self.result(intent["reply"], commands=[{key: value for key, value in intent.items() if key != "reply"}])
 
-    async def chat(self, owner: str, prompt: str, scopes: frozenset[str]) -> dict[str, object]:
+    async def chat(self, owner: str, prompt: str, scopes: frozenset[str], *, progress: Callable[[str], None] | None = None) -> dict[str, object]:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 2000:
             raise ValueError("invalid_prompt")
-        intent = command_intent(prompt)
+        decision = coordinate(prompt)
+        intent = decision.intent
+        if intent and intent["type"] == "resume_topic":
+            return await self.run(owner, lambda: self.command(owner, intent, scopes))
         if intent:
             epoch = await self.memory_epoch(scopes)
             result = await self.command(owner, intent, scopes)
             result["memory"] = await self.save_turn(prompt, result["reply"], "command", scopes, epoch)
             return result
-        return await self.run(owner, lambda: self.answer(owner, prompt, scopes))
+        return await self.run(owner, lambda: self.answer(owner, prompt, scopes, progress=progress))
 
     async def memory_epoch(self, scopes: frozenset[str]) -> int | None:
         """No guardar ni recuperar conversaciones de una sesión sin su permiso."""
@@ -165,7 +198,7 @@ class OperatorServices:
         return {"saved": saved, "available": self.services.conversations.available,
                 "state": "saved" if saved else "not_saved", "encrypted": saved}
 
-    async def answer(self, owner: str, prompt: str, scopes: frozenset[str]) -> dict[str, object]:
+    async def answer(self, owner: str, prompt: str, scopes: frozenset[str], *, progress: Callable[[str], None] | None = None) -> dict[str, object]:
         state = self.store.state(owner, touch=True)
         generation = state.generation
         epoch = await self.memory_epoch(scopes)
@@ -189,7 +222,7 @@ class OperatorServices:
             except Exception:
                 self.services.conversations.errors += 1
         started = time.monotonic()
-        result = await self.services.language.ask(prompt, context=context, query_id=uuid4().hex, history=state.turns)
+        result = await self.services.language.ask(prompt, context=context, query_id=uuid4().hex, history=state.turns, **({"progress": progress} if progress is not None else {}))
         # NOTA DEL OPERADOR: solo un turno completado pasa a la memoria reciente.
         # Un fallo, una cancelacion o una sesion revocada no deja media respuesta.
         self.ensure_current(owner, state, generation)

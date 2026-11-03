@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from time import monotonic
 from collections.abc import Awaitable, Callable
 from functools import wraps
 from uuid import uuid4
 
 from django.core.handlers.asgi import ASGIRequest
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_GET, require_POST
 
 from core.services import AssistantServices
@@ -46,7 +48,8 @@ def private(handler: Handler) -> Callable[[ASGIRequest], Awaitable[HttpResponse]
                             "voice_loading", "voice_synthesis_failed", "voice_policy_blocked", "web_paid_provider_blocked"})
             allowed.add('secure_storage_unavailable')
             allowed.add('conversation_memory_unavailable')
-            allowed.update({"interaction_busy", "interaction_cancelled", "interaction_capacity", "document_busy"})
+            allowed.update({"interaction_busy", "interaction_cancelled", "interaction_capacity", "document_busy", "document_vision_unconfigured",
+                            "document_vision_model_missing", "document_vision_failed"})
             allowed.update({"microphone_busy", "microphone_disabled", "microphone_closed",
                             "microphone_model_missing", "microphone_engine_missing", "microphone_loading",
                             "microphone_model_invalid", "microphone_invalid_configuration",
@@ -162,6 +165,39 @@ async def chat(request: ASGIRequest, services: AssistantServices) -> JsonRespons
         raise ValueError("invalid_prompt")
     from .operator import principal
     owner, scopes = principal(request)
+    if request.headers.get("Accept") == "application/x-ndjson":
+        async def stream():
+            events: asyncio.Queue[dict[str, object]] = asyncio.Queue()
+            started = monotonic()
+
+            async def run() -> None:
+                try:
+                    result = await services.operator.chat(
+                        owner, prompt, scopes, progress=lambda delta: events.put_nowait({"delta": delta}))
+                    events.put_nowait({"result": result, "total_ms": round((monotonic() - started) * 1000, 2)})
+                except (RuntimeError, ValueError) as exc:
+                    code = str(exc)
+                    public = {"model_busy", "interaction_busy", "interaction_cancelled", "engine_unavailable",
+                              "model_missing", "model_query_failed", "command_scope_required"}
+                    events.put_nowait({"error": code if code in public else "service_unavailable"})
+                except Exception as exc:
+                    logger.warning("Flujo de conversación fallido (%s).", type(exc).__name__)
+                    events.put_nowait({"error": "service_unavailable"})
+
+            task = asyncio.create_task(run())
+            try:
+                while True:
+                    event = await events.get()
+                    yield (json.dumps(event, ensure_ascii=True, allow_nan=False) + "\n").encode()
+                    if "delta" not in event:
+                        break
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+
+        response = StreamingHttpResponse(stream(), content_type="application/x-ndjson")
+        response["Cache-Control"] = "no-store"
+        return response
     result = await services.operator.chat(owner, prompt, scopes)
     return JsonResponse(result)
 
@@ -184,7 +220,9 @@ async def network_diagnose(request: ASGIRequest, services: AssistantServices) ->
 @require_POST
 @private
 async def web_search(request: ASGIRequest, services: AssistantServices) -> JsonResponse:
-    data = body(request, {"query", "internet_consent"})
+    data = body(request, {"query", "internet_consent"}, optional={"investigate"})
+    if type(data.get("investigate", False)) is not bool:
+        raise ValueError("invalid_fields")
     return await web_result(request, services, data, read=False)
 
 
@@ -206,7 +244,7 @@ async def web_result(request: ASGIRequest, services: AssistantServices, data: di
             result = await services.internet.read(data["url"], consent=data["internet_consent"], identity=uuid4().hex)
             prompt = "Resume la pagina adjunta y senala sus limites."
         else:
-            result = await services.internet.search(data["query"], consent=data["internet_consent"], identity=uuid4().hex)
+            result = await services.internet.search(data["query"], consent=data["internet_consent"], identity=uuid4().hex, **({"investigate": True} if data.get("investigate") else {}))
             prompt = "Resume los resultados para: " + data["query"]
         answer = await services.web_answer(result, prompt)
         services.operator.ensure_current(owner, state, generation)
@@ -255,12 +293,14 @@ async def speech(request: ASGIRequest, services: AssistantServices) -> HttpRespo
     if not isinstance(data["text"], str):
         raise ValueError("voice_invalid_text")
     identity = uuid4().hex
+    started = monotonic()
     audio = await services.voice.speak(data["text"], cloud_consent=data["cloud_consent"], request_id=identity)
     response = HttpResponse(audio, content_type=getattr(services.voice, "content_type", "audio/mpeg"))
     response["X-Thorn-Voice-Provider"] = services.voice.status["provider"]
     response["Cache-Control"] = "no-store"
     response["X-Content-Type-Options"] = "nosniff"
     response["X-Thorn-Speech-ID"] = identity
+    response["X-Thorn-Synthesis-Ms"] = str(round((monotonic() - started) * 1000, 2))
     return response
 
 
@@ -272,8 +312,9 @@ async def transcribe(request: ASGIRequest, services: AssistantServices) -> JsonR
         raise ValueError("microphone_local_consent_required")
     if request.content_type != "application/octet-stream":
         raise ValueError("microphone_pcm_required")
+    started = monotonic()
     result = await services.microphone.transcribe(request.body, local_consent=True, request_id=uuid4().hex)
-    response = JsonResponse(result)
+    response = JsonResponse({**result, "transcription_ms": round((monotonic() - started) * 1000, 2)})
     response["Cache-Control"] = "no-store"
     response["X-Content-Type-Options"] = "nosniff"
     return response

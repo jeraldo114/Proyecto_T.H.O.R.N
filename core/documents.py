@@ -20,6 +20,8 @@ from .commands import normalize
 from .paths import RESOURCE_ROOT, compiled
 
 UPLOAD_PATH = "/api/v1/documents/upload/"
+VISION_PATH = "/api/v1/documents/vision/"
+MAX_VISION_REQUEST_BYTES = 1401024
 
 
 def question_excerpts(pages: list[dict[str, object]], prompt: str) -> list[dict[str, object]]:

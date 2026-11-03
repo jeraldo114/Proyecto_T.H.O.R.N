@@ -57,7 +57,7 @@ def system_prompt(context: dict[str, object]) -> str:
         "cloud=true significa proveedor externo. No inventes que habla si no esta "
         "disponible. El dictado de microfono, si esta habilitado, "
         "transcribe localmente. La interfaz permite dictado manual o conversacion "
-        "por turnos autorizada; cierra la entrada mientras responde y no escucha "
+        "por turnos autorizada, con interrupcion experimental opcional. No escucha "
         "sin sesion ni en segundo plano. El HUD permite activacion opcional por Thorn, "
         "detectada mediante transcripcion local, y seguimientos de 30 segundos. "
         "No afirmes que el microfono esta abierto: no recibes su estado en vivo. "

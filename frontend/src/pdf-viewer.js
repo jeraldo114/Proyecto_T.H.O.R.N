@@ -15,10 +15,54 @@ export function createPdfViewer(root, { id, credential, active, onError, onOcr }
   toolbar.append(ocrButton, cancelOcr);
   const surface = document.createElement('div'); surface.className = 'pdf-surface';
   const message = document.createElement('p'); message.className = 'viewer-message';
-  root.append(toolbar, surface, message);
+  const evidence = document.createElement('figure'); evidence.hidden = true;
+  root.append(toolbar, surface, message, evidence);
   let pdf, loading, drawing, closing, pageNumber = 1, zoom = 1, disposed = false, visible = true, revision = 0, timer;
   const abort = new AbortController();
   let ocrAbort, ocrDrawing;
+  const vision = button('Analizar imagen', 'Analizar esta página con el modelo visual local configurado');
+  toolbar.append(vision);
+  vision.onclick = async () => {
+    const canvas = surface.querySelector('canvas[data-rendered="true"]');
+    if (!canvas || !active() || ocrAbort) return;
+    const selected = pageNumber;
+    const controller = new AbortController(); ocrAbort = controller;
+    vision.disabled = true; cancelOcr.hidden = false;
+    message.textContent = 'Analizando imagen en el equipo…';
+    evidence.hidden = true; evidence.replaceChildren();
+    const sample = document.createElement('canvas');
+    try {
+      const scale = Math.min(1, 1280 / Math.max(canvas.width, canvas.height));
+      sample.width = Math.max(1, Math.round(canvas.width * scale)); sample.height = Math.max(1, Math.round(canvas.height * scale));
+      sample.getContext('2d').drawImage(canvas, 0, 0, sample.width, sample.height);
+      const image = sample.toDataURL('image/jpeg', 0.85);
+      const token = await credential();
+      const response = await fetch('/api/v1/documents/vision/', {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, page: selected, image: image.split(',')[1] }),
+        cache: 'no-store', credentials: 'omit', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(65000)]),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error);
+      if (!controller.signal.aborted && active()) {
+        message.textContent = `Página ${result.page} · ${result.elapsed_ms} ms · Estimación visual\n${result.reply}`;
+        const preview = document.createElement('canvas');
+        preview.width = Math.min(320, sample.width); preview.height = Math.max(1, Math.round(preview.width * sample.height / sample.width));
+        preview.getContext('2d').drawImage(sample, 0, 0, preview.width, preview.height);
+        const caption = document.createElement('figcaption'); caption.textContent = `Imagen analizada · página ${selected}`;
+        evidence.replaceChildren(preview, caption); evidence.hidden = false;
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        message.textContent = ({ document_vision_unconfigured: 'Configura THORN_DOCUMENT_VISION_MODEL para usar visión local.',
+          document_vision_model_missing: 'El modelo visual configurado no está instalado en Ollama.' })[error.message] || 'No se pudo analizar esta página.';
+      }
+    } finally {
+      sample.width = sample.height = 0;
+      if (controller.signal.aborted && !disposed) message.textContent = 'Análisis cancelado.';
+      ocrAbort = null; vision.disabled = false; cancelOcr.hidden = true;
+    }
+  };
   cancelOcr.onclick = () => { ocrAbort?.abort(); ocrDrawing?.cancel(); };
   ocrButton.onclick = async () => {
     if (!pdf || disposed || !visible || !active() || ocrAbort) return;

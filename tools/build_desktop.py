@@ -14,10 +14,11 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> int:
     parser = argparse.ArgumentParser(description='Compilar T.H.O.R.N standalone para Windows')
     parser.add_argument('--jobs', type=int, default=2)
+    parser.add_argument('--output-dir', type=Path, default=ROOT / 'dist')
     args = parser.parse_args()
     if os.name != 'nt' or not 1 <= args.jobs <= 4:
         parser.error('Requiere Windows y entre 1 y 4 jobs.')
-    destination = ROOT / 'dist'
+    destination = args.output_dir.resolve()
     destination.mkdir(exist_ok=True)
     flags = [sys.executable, '-m', 'nuitka', '--mode=standalone', '--msvc=latest', '--assume-yes-for-downloads',
         f'--jobs={args.jobs}', '--lto=no', '--python-flag=no_docstrings',

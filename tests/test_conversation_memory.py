@@ -32,12 +32,25 @@ class ConversationMemoryTests(unittest.IsolatedAsyncioTestCase):
         self.patch = patch("core.conversation_memory.db_session", session)
         self.patch.start(); self.addCleanup(self.patch.stop)
 
+    async def test_concept_query_matches_old_index_without_reindex(self) -> None:
+        old_terms = set(self.memory.term_hashes("Proyecto con cámaras"))
+        new_terms = set(self.memory.term_hashes("Mi idea para vigilar la casa", 24, related=True))
+        self.assertTrue(old_terms & new_terms)
+        self.assertFalse(old_terms & set(self.memory.term_hashes("Mi idea para vigilar la casa")))
+
+    async def test_paused_recording_does_not_insert(self) -> None:
+        self.cur.fetchone.side_effect = [self.cur.fetchone.return_value,
+                                       (self.cipher.encrypt(True, "setting:conversation_paused"),)]
+        self.assertFalse(await self.memory.append("Antes", "Después", source="local_llm", epoch=0))
+        self.conn.commit.assert_not_awaited()
+
     async def test_full_turn_is_encrypted_and_index_cannot_reveal_words(self) -> None:
         prompt, reply = "Mi prototipo se llama espino azul", "Guardaré ese nombre: espino azul."
+        self.cur.fetchone.side_effect = [self.cur.fetchone.return_value, None]
         self.assertTrue(await self.memory.append(prompt, reply, source="local_llm", epoch=0))
         calls = self.cur.execute.call_args_list
         self.assertIn("FOR UPDATE", calls[0].args[0])
-        identity, _, source, encoded = calls[1].args[1]
+        identity, _, source, encoded = calls[2].args[1]
         self.assertEqual(self.cipher.decrypt(encoded, f"conversation:{identity}"), {"prompt": prompt, "reply": reply})
         self.assertNotIn("espino", str(calls))
         self.assertTrue(all(len(bytes.fromhex(term)) == 32 for term, _ in self.cur.executemany.call_args.args[1]))

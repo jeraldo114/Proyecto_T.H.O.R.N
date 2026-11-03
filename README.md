@@ -136,12 +136,40 @@ circuitos, diagramas o imágenes. La activación por «Thorn» usa la transcripc
 local; necesita la sesión y el permiso del micrófono. No escucha con la ventana
 oculta ni intenta saltarse el primer permiso del navegador.
 
+**Órdenes para el día a día.** «Retoma el tema de cámaras» busca en el
+archivo cifrado, muestra la conversación de origen y la incorpora al contexto
+de la sesión. «Revisa el equipo» muestra telemetría y alertas locales.
+«Investiga sobre …» requiere autorización de Internet. Busca con el proveedor
+configurado e intenta leer hasta tres resultados públicos para resumirlos con
+fuentes. Wikipedia cubre temas enciclopédicos. La búsqueda web general usa el
+proveedor Brave ya previsto y requiere su clave y habilitarlo expresamente.
+
+**Conversación progresiva.** El texto aparece durante la generación. Con voz
+local automática, una frase completa puede empezar a sonar antes del final.
+Usa Escape para cancelar. Si activas la interrupción experimental antes de
+iniciar la conversación, di «Thorn, espera». El micrófono usa la cancelación
+de eco del navegador y durante la respuesta solo busca esa frase. Su eficacia
+depende del dispositivo, el volumen y la acústica. Diagnóstico muestra la
+última duración observada de transcripción, generación y síntesis.
+
+**Visión y razonamiento opcionales.** Define en el entorno privado
+`THORN_DOCUMENT_VISION_MODEL` con el nombre de un modelo visual instalado en
+Ollama. Luego abre un PDF y pulsa **Analizar imagen** en la página elegida.
+El resultado señala la página y el tiempo medido. Las conexiones de un
+circuito son estimaciones visuales. Para reservar un modelo mayor para
+consultas explícitas, define `THORN_REASONING_MODEL` y escribe
+`Analiza a fondo: …`. Ambos modelos opcionales se solicitan con liberación de
+memoria al finalizar. El visor y el razonador requieren pesos locales y una
+medición en el equipo antes de considerarlos listos para uso habitual.
+
 Las conversaciones completadas ahora se guardan automáticamente **si MySQL y
 el cifrado están disponibles**. Al reconectar, se recuperan turnos recientes y
-coincidencias de palabras del historial. El archivo conserva el texto completo,
+coincidencias de palabras y conceptos de un diccionario local del historial. El archivo conserva el texto completo,
 pero el modelo recibe extractos: recordar no equivale a cargar todo en RAM ni
 a garantizar que la IA recuerde cada detalle. Puedes buscarlo y borrarlo desde
-**Memoria e historial**. Las notas explícitas siguen separadas y no se guarda audio.
+**Memoria e historial**. También puedes corregir la respuesta de un turno,
+buscar un tema y olvidar sus turnos seleccionados, y pausar o reanudar el guardado. El HUD muestra
+las fechas y los identificadores de los extractos entregados al modelo. Las notas explícitas siguen separadas y no se guarda audio.
 Lo hablado antes de esta mejora no se puede reconstruir si nunca se guardó.
 
 Dejé los controles y límites en [Memoria y fluidez](docs/MEMORIA_Y_FLUIDEZ.md).
@@ -174,11 +202,12 @@ npm test
 npm run build
 ```
 
-Bastion 9 cuenta con **213 pruebas de backend y 52 de módulos del frontend**,
+Bastion 9 cuenta con **221 pruebas de backend y 52 de módulos del frontend**,
 además de pruebas de los flujos del HUD. Pasarlas ayuda a encontrar errores;
 todavía queda probar el uso cotidiano en distintos equipos.
 
 Para profundizar están las [notas del proyecto](docs/NOTAS_DEL_PROYECTO.md),
+el [método para el coordinador local](docs/METODO_COORDINADOR_LOCAL.md),
 la [guía de seguridad](SECURITY.md) y los pasos de
 [publicación en GitHub](docs/PUBLICACION_GITHUB.md).
 

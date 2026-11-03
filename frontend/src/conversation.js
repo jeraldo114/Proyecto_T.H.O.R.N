@@ -1,8 +1,8 @@
 import { WakeWordGate } from './wake-word.js';
 /** Turnos seriales: voz local -> texto local -> respuesta -> salida autorizada. */
 export class ConversationLoop {
-  constructor({ createCapture, transcribe, ask, speak, onState, onLevel, onText }) {
-    Object.assign(this, { createCapture, transcribe, ask, speak, onState, onLevel, onText });
+  constructor({ createCapture, transcribe, ask, speak, onState, onLevel, onText, onInterrupt }) {
+    Object.assign(this, { createCapture, transcribe, ask, speak, onState, onLevel, onText, onInterrupt });
     this.enabled = false; this.revision = 0; this.state = 'off';
     this.wakeGate = new WakeWordGate(); this.requireWake = false;
   }
@@ -17,11 +17,12 @@ export class ConversationLoop {
     this.wakeGate.reset();
     const generation = ++this.revision;
     this.controller = new AbortController(); this.setState('loading');
+    this.deviceId = deviceId;
     this.capture = this.createCapture({
       onLevel: value => { if (this.current(generation)) this.onLevel(value); },
-      onSpeechStart: () => { if (this.current(generation)) this.setState('hearing'); },
+      onSpeechStart: () => { if (this.current(generation) && !this.interruptOnly) this.setState('hearing'); },
       onSilence: () => { if (this.current(generation) && this.state === 'hearing') this.setState(this.idleState()); },
-      onSpeechEnd: pcm => { void this.turn(pcm, generation); },
+      onSpeechEnd: pcm => { void (this.interruptOnly ? this.interrupt(pcm, generation) : this.turn(pcm, generation)); },
       onEnded: (state = 'device_lost') => { if (this.current(generation)) this.stop(state); },
     });
     const capture = this.capture;
@@ -49,9 +50,18 @@ export class ConversationLoop {
       if (gate.accepted) this.onText(value);
       if (value.trim()) {
         this.setState('thinking');
+        if (this.bargeIn) {
+          this.interruptOnly = true;
+          try { await this.capture.start(this.deviceId); }
+          catch { this.interruptOnly = false; }
+        }
+        if (!this.current(generation)) return;
         const reply = await this.ask(value, signal);
         if (!this.current(generation)) return;
         if (reply) { this.setState('speaking'); await this.speak(reply, signal); }
+        if (this.interruptOnly && this.current(generation)) {
+          await this.capture.pause(); this.interruptOnly = false;
+        }
         if (this.requireWake) this.wakeGate.followUp();
       }
       if (!this.current(generation)) return;
@@ -70,8 +80,18 @@ export class ConversationLoop {
     } catch { if (this.current(generation)) this.stop('turn_error'); }
     finally { pcm.fill(0); }
   }
+  async interrupt(pcm, generation) {
+    if (!this.current(generation) || this.interrupting) { pcm.fill(0); return; }
+    this.interrupting = true;
+    try {
+      const text = await this.transcribe(pcm, this.controller.signal);
+      if (this.current(generation) && this.interruptOnly &&
+          /^(?:thorn|torn|tor|thor)[, ]+espera[.!]?$/iu.test(text.trim())) this.onInterrupt?.();
+    } catch { /* El turno principal sigue activo si falla el reconocimiento. */ }
+    finally { pcm.fill(0); if (this.current(generation)) this.interrupting = false; }
+  }
   stop(state = 'off') {
-    this.enabled = false; this.revision++;
+    this.enabled = false; this.revision++; this.interruptOnly = false; this.interrupting = false;
     this.controller?.abort(); this.controller = null;
     clearTimeout(this.cooldown); this.cooldownResolve?.(); this.cooldownResolve = null;
     clearTimeout(this.followTimer); this.wakeGate.reset();
