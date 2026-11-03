@@ -83,8 +83,13 @@ try {
   await page.waitForFunction(() => document.querySelector('#sample-state').textContent === 'MUESTRA VIGENTE');
   await page.locator('[data-view=system]').click();
   await page.locator('#diagnostic-button').click();
-  await page.waitForFunction(() => document.querySelector('#console-text').textContent.includes('aceptado'));
+  await page.waitForFunction(() => document.querySelector('#console-text').textContent.includes('Transcripción:') && document.querySelector('#console-text').textContent.includes('Síntesis:'));
   await page.locator('#close-console').click();
+  const event = await context.request.post(`${url}/api/v1/events/`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { event_type: 'command.received', payload: { command: 'hud.e2e' } },
+  });
+  assert.equal(event.status(), 202);
   await page.locator('[data-view=activity]').click();
   await page.locator('#activity-filter').selectOption('command');
   await page.waitForFunction(() => document.querySelector('#activity-list').textContent.includes('Comando recibido'));
