@@ -22,7 +22,7 @@
     "@tesseract.js-data/spa": "1.0.0",
     "leaflet": "1.9.4",
     "lucide": "1.52.0",
-    "onnxruntime-web": "1.22.0",
+    "onnxruntime-web": "1.31.1",
     "pdfjs-dist": "6.5.438",
     "tesseract.js": "7.0.0",
     "three": "0.186.1"
