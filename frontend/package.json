@@ -21,7 +21,7 @@
     "@ricky0123/vad-web": "0.0.31",
     "@tesseract.js-data/spa": "1.0.0",
     "leaflet": "1.9.4",
-    "lucide": "1.52.0",
+    "lucide": "1.65.0",
     "onnxruntime-web": "1.22.0",
     "pdfjs-dist": "6.5.438",
     "tesseract.js": "7.0.0",
