@@ -155,7 +155,9 @@ depende del dispositivo, el volumen y la acústica. Diagnóstico muestra la
 **Visión y razonamiento opcionales.** Define en el entorno privado
 `THORN_DOCUMENT_VISION_MODEL` con el nombre de un modelo visual instalado en
 Ollama. Luego abre un PDF y pulsa **Analizar imagen** en la página elegida.
-El resultado señala la página y el tiempo medido. Las conexiones de un
+Puedes marcar **Recortar con el puntero** y arrastrar sobre un circuito para
+analizar solo esa región. El HUD muestra la imagen analizada, la página y
+el tiempo medido. Las conexiones de un
 circuito son estimaciones visuales. Para reservar un modelo mayor para
 consultas explícitas, define `THORN_REASONING_MODEL` y escribe
 `Analiza a fondo: …`. Ambos modelos opcionales se solicitan con liberación de

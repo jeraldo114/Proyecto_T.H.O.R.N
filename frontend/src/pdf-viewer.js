@@ -21,20 +21,51 @@ export function createPdfViewer(root, { id, credential, active, onError, onOcr }
   const abort = new AbortController();
   let ocrAbort, ocrDrawing;
   const vision = button('Analizar imagen', 'Analizar esta página con el modelo visual local configurado');
-  toolbar.append(vision);
+  const cropLabel = document.createElement('label');
+  const cropEnabled = document.createElement('input'); cropEnabled.type = 'checkbox';
+  cropLabel.append(cropEnabled, ' Recortar con el puntero'); toolbar.append(vision, cropLabel);
+  let crop, drag;
+  const point = event => {
+    const canvas = surface.querySelector('canvas[data-rendered="true"]');
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return { x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
+      y: Math.max(0, Math.min(1, (event.clientY - rect.top) / rect.height)) };
+  };
+  surface.addEventListener('pointerdown', event => {
+    if (!cropEnabled.checked || ocrAbort || event.button !== 0 || event.target.tagName !== 'CANVAS') return;
+    drag = point(event); if (drag) surface.setPointerCapture(event.pointerId);
+  });
+  surface.addEventListener('pointercancel', () => { drag = null; });
+  surface.addEventListener('pointerup', event => {
+    if (!drag) return;
+    const end = point(event), start = drag; drag = null;
+    if (!end) return;
+    const w = Math.abs(end.x - start.x), h = Math.abs(end.y - start.y);
+    crop = w >= 0.02 && h >= 0.02 ? { page: pageNumber, x: Math.min(start.x, end.x),
+      y: Math.min(start.y, end.y), w, h } : null;
+    message.textContent = crop ? 'Recorte seleccionado. Pulsa Analizar imagen.' : 'Selecciona una zona más amplia.';
+  });
+  cropEnabled.onchange = () => { crop = null; drag = null; };
   vision.onclick = async () => {
     const canvas = surface.querySelector('canvas[data-rendered="true"]');
     if (!canvas || !active() || ocrAbort) return;
     const selected = pageNumber;
+    const region = cropEnabled.checked && crop?.page === selected ? crop : null;
+    if (cropEnabled.checked && !region) { message.textContent = 'Arrastra sobre la página para seleccionar el recorte.'; return; }
     const controller = new AbortController(); ocrAbort = controller;
     vision.disabled = true; cancelOcr.hidden = false;
     message.textContent = 'Analizando imagen en el equipo…';
     evidence.hidden = true; evidence.replaceChildren();
     const sample = document.createElement('canvas');
     try {
-      const scale = Math.min(1, 1280 / Math.max(canvas.width, canvas.height));
-      sample.width = Math.max(1, Math.round(canvas.width * scale)); sample.height = Math.max(1, Math.round(canvas.height * scale));
-      sample.getContext('2d').drawImage(canvas, 0, 0, sample.width, sample.height);
+      const { x, y, w, h } = region || { x: 0, y: 0, w: 1, h: 1 };
+      const width = canvas.width * w, height = canvas.height * h;
+      const scale = Math.min(1, 1280 / Math.max(width, height));
+      sample.width = Math.max(1, Math.round(width * scale)); sample.height = Math.max(1, Math.round(height * scale));
+      sample.getContext('2d').drawImage(canvas, canvas.width * x, canvas.height * y, width, height,
+        0, 0, sample.width, sample.height);
       const image = sample.toDataURL('image/jpeg', 0.85);
       const token = await credential();
       const response = await fetch('/api/v1/documents/vision/', {
@@ -49,7 +80,7 @@ export function createPdfViewer(root, { id, credential, active, onError, onOcr }
         const preview = document.createElement('canvas');
         preview.width = Math.min(320, sample.width); preview.height = Math.max(1, Math.round(preview.width * sample.height / sample.width));
         preview.getContext('2d').drawImage(sample, 0, 0, preview.width, preview.height);
-        const caption = document.createElement('figcaption'); caption.textContent = `Imagen analizada · página ${selected}`;
+        const caption = document.createElement('figcaption'); caption.textContent = `${region ? "Recorte analizado" : "Imagen analizada"} · página ${selected}`;
         evidence.replaceChildren(preview, caption); evidence.hidden = false;
       }
     } catch (error) {
