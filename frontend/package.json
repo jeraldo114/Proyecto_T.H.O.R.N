@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@fontsource/chakra-petch": "5.3.0",
-    "@mediapipe/tasks-vision": "1.2.0",
+    "@mediapipe/tasks-vision": "1.2.2",
     "@ricky0123/vad-web": "0.0.31",
     "@tesseract.js-data/spa": "1.0.0",
     "leaflet": "1.9.4",
