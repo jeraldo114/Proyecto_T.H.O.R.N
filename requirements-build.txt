@@ -4,6 +4,6 @@
 #
 #    pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --no-emit-trusted-host --no-index --output-file=requirements-build.txt requirements-build.in
 #
-nuitka==4.3.3 \
-    --hash=sha256:3bed65735d5cfc53dc13070f9f17c52dbe584c0f03de32b6ef011f5db674add9
+nuitka==4.3.4 \
+    --hash=sha256:e98e0c9a3224b581cf8ec0fab92b039b90fb7fa78673550c22833a82de444b25
     # via -r requirements-build.in
