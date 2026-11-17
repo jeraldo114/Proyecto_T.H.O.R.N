@@ -96,6 +96,18 @@ Python, comprobar Django, revisar archivos para GitHub, probar/compilar el HUD
 y lanzar una demo del nucleo sin MySQL. **Ctrl+Shift+B** compila el HUD.
 La revision para GitHub incluye archivos nuevos sin hacer `git add` ni publicar.
 
+Para medir la voz y las ordenes:
+
+| Tarea | Que hace | Antes necesitas |
+| --- | --- | --- |
+| `THORN: crear audio de prueba` | Sintetiza con Piper una frase en `.artifacts/frase-prueba.wav`. | El modelo Piper instalado. |
+| `THORN: medir deteccion del nombre` | Aciertos y falsas alarmas de «Thorn» con tus grabaciones. | Un manifiesto `{"wav", "wake"}` (pide la ruta). |
+| `THORN: comparar modelos de dictado` | Error de palabras, tiempo y RAM del Vosk pequeno frente al grande. | Un manifiesto `{"wav", "text"}` (pide la ruta). |
+| `THORN: evaluar ordenes` | Clasifica las frases de `tests/fixtures/intent_cases.json`. | Nada. |
+| `THORN: prueba de interrupcion (navegador)` | Silero real en Chromium: eco ignorado y orden nueva atendida. | El servidor en marcha (pide la URL) y el audio de prueba. |
+
+Las grabaciones y manifiestos van en `.artifacts/`, fuera de Git: son tu voz.
+
 En **Ejecutar y depurar** tienes una demo y una API de desarrollo en el puerto
 **8005**, sin MySQL. El HUD puede abrirse en `http://127.0.0.1:8005/`; los modulos
 que requieren persistencia estaran deshabilitados. La sesion habitual de esta

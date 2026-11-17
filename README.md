@@ -240,7 +240,9 @@ npm run build
 
 Bastion 9 cuenta con **240 pruebas de backend y 69 de módulos del frontend**,
 además de pruebas de los flujos del HUD (`npm run test:bargein` verifica la
-interrupción con Silero real; necesita `THORN_VOICE_FIXTURE_WAV` con una frase hablada). Pasarlas ayuda a encontrar errores;
+interrupción con Silero real; necesita `THORN_VOICE_FIXTURE_WAV` con una frase hablada,
+que genera `tools/make_voice_fixture.py`). En VS Code, las tareas `THORN:` del workspace
+lanzan estas pruebas y las mediciones de voz. Pasarlas ayuda a encontrar errores;
 todavía queda probar el uso cotidiano en distintos equipos.
 
 Para profundizar están las [notas del proyecto](docs/NOTAS_DEL_PROYECTO.md),

@@ -148,6 +148,86 @@
         "args": ["main.py", "--demo", "--sin-db"],
         "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
         "problemMatcher": []
+      },
+      {
+        "label": "THORN: crear audio de prueba",
+        "detail": "Sintetiza con Piper local una frase en .artifacts/frase-prueba.wav para las pruebas de voz.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/make_voice_fixture.py"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: medir deteccion del nombre",
+        "detail": "Aciertos y falsas alarmas de «Thorn» con tus grabaciones: gramatica frente a alias.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/evaluate_wake.py", "${input:manifiestoNombre}"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: comparar modelos de dictado",
+        "detail": "Error de palabras, tiempo y RAM del modelo Vosk pequeno frente al grande con tus grabaciones.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/compare_speech.py", "${input:manifiestoDictado}"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: evaluar ordenes",
+        "detail": "Clasifica las frases de tests/fixtures/intent_cases.json y mide la latencia del reconocedor.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/evaluate_intents.py"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: prueba de interrupcion (navegador)",
+        "detail": "Silero real en Chromium. Requiere el servidor en marcha y antes la tarea «crear audio de prueba».",
+        "type": "shell",
+        "command": "npm",
+        "windows": { "command": "npm.cmd" },
+        "args": ["run", "test:bargein"],
+        "options": {
+          "cwd": "${workspaceFolder:00 - Inicio}/frontend",
+          "env": {
+            "THORN_TEST_URL": "${input:urlServidor}",
+            "THORN_VOICE_FIXTURE_WAV": "${workspaceFolder:00 - Inicio}/.artifacts/frase-prueba.wav"
+          }
+        },
+        "group": "test",
+        "problemMatcher": []
+      }
+    ],
+    "inputs": [
+      {
+        "id": "manifiestoNombre",
+        "type": "promptString",
+        "description": "Manifiesto JSON con grabaciones del nombre ({\"wav\": \"...\", \"wake\": true|false})",
+        "default": ".artifacts/nombre.json"
+      },
+      {
+        "id": "manifiestoDictado",
+        "type": "promptString",
+        "description": "Manifiesto JSON con grabaciones de dictado ({\"wav\": \"...\", \"text\": \"...\"})",
+        "default": ".artifacts/muestras.json"
+      },
+      {
+        "id": "urlServidor",
+        "type": "promptString",
+        "description": "URL del servidor de Thorn en marcha",
+        "default": "http://127.0.0.1:8004"
       }
     ]
   },
