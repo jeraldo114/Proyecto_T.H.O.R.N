@@ -14,8 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
-from core.secure_files import atomic_private_write, sealed_read, sealed_write
-from core.secure_storage import canonical, encode64, decode64
+from core.security.secure_files import atomic_private_write, sealed_read, sealed_write
+from core.security.secure_storage import canonical, encode64, decode64
 from core.version import RELEASE
 
 DOMAIN = b'THORN-RELEASE-v1\x00'

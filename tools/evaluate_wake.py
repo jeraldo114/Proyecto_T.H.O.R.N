@@ -21,8 +21,8 @@ import wave
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.commands import WAKE_ALIASES, normalize  # noqa: E402
-from core.speech_input import (MAX_SECONDS, MODEL_PATH, SAMPLE_RATE, _decode, _detect_wake,  # noqa: E402
+from core.brain.commands import WAKE_ALIASES, normalize  # noqa: E402
+from core.voice.speech_input import (MAX_SECONDS, MODEL_PATH, SAMPLE_RATE, _decode, _detect_wake,  # noqa: E402
                                _load_model, supports_grammar)
 
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rate, networkIntent, topicFollowUp, safeSourceUrl } from '../src/network.js';
+import { rate, networkIntent, topicFollowUp, safeSourceUrl } from '../src/network/network.js';
 
 test('tasas conservan ausencia y distinguen bytes por segundo', () => {
   assert.equal(rate(null), '—'); assert.equal(rate(NaN), '—'); assert.equal(rate(-1), '—');
@@ -33,7 +33,7 @@ test('el tema siguiente usa una sola aclaración vigente y respeta órdenes nuev
 });
 
 test('el diagnóstico dice en qué etapa falló y sigue leyendo el formato anterior', async () => {
-  const { describeDiagnosis } = await import('../src/network.js');
+  const { describeDiagnosis } = await import('../src/network/network.js');
   const ok = describeDiagnosis({ checked_at: '2026-11-17T12:00:00Z', reachable: true, dns_ms: 12, https_ms: 80, failed_stage: null,
     checks: [{ host: 'example.com', reachable: true, dns_ms: 12, https_ms: 80 }, { host: 'es.wikipedia.org', reachable: false, failed_stage: 'tls' }] });
   assert.equal(ok.summary, 'DNS 12 ms / HTTPS 80 ms');

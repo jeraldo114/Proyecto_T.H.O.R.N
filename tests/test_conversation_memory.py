@@ -8,11 +8,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
-from core.audit import AuditStore
-from core.conversation_memory import ConversationMemory, words
-from core.secure_storage import StorageCipher
-from core.sessions import required_scope
-from core.documents import DocumentService, question_excerpts
+from core.memory.audit import AuditStore
+from core.memory.conversation_memory import ConversationMemory, words
+from core.security.secure_storage import StorageCipher
+from core.security.sessions import required_scope
+from core.documents.service import DocumentService, question_excerpts
 from tests.test_bastion9 import blank_pdf
 
 
@@ -29,7 +29,7 @@ class ConversationMemoryTests(unittest.IsolatedAsyncioTestCase):
         @asynccontextmanager
         async def session():
             yield self.conn, self.cur
-        self.patch = patch("core.conversation_memory.db_session", session)
+        self.patch = patch("core.memory.conversation_memory.db_session", session)
         self.patch.start(); self.addCleanup(self.patch.stop)
 
     async def test_concept_query_matches_old_index_without_reindex(self) -> None:

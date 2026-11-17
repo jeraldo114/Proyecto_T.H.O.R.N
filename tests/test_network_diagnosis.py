@@ -10,8 +10,8 @@ import httpcore
 import httpx
 
 from core.event_bus import EventBus
-from core.internet import InternetService
-from core.network_sensor import NetworkSensor
+from core.network.internet import InternetService
+from core.network.network_sensor import NetworkSensor
 from tests.test_assistant import MemoryAudit
 
 

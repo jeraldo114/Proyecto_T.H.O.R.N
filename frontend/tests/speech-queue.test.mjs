@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { SpeechQueue, splitSpeech, takeSentence } from '../src/speech-queue.js';
+import { SpeechQueue, splitSpeech, takeSentence } from '../src/voice/speech-queue.js';
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 

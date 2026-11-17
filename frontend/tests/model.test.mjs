@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { percent, gib, duration, eventMatches, appendSample } from '../src/model.js';
+import { percent, gib, duration, eventMatches, appendSample } from '../src/state/model.js';
 
 test('no convierte datos ausentes en porcentajes fabricados', () => {
   for (const value of [undefined, null, '25', NaN, Infinity, -1, 101]) assert.equal(percent(value), null);

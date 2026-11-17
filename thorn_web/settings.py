@@ -1,10 +1,10 @@
-"""Django administra HTTP; core/db_core.py administra las consultas MySQL."""
+"""Django administra HTTP; core/memory/db_core.py administra las consultas MySQL."""
 
 from __future__ import annotations
 
 import math
 import os
-from core.document_worker import MAX_PDF_BYTES
+from core.documents.worker import MAX_PDF_BYTES
 
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = False

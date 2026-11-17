@@ -11,7 +11,7 @@ HAS_DEPENDENCIES = all(
     importlib.util.find_spec(name) is not None for name in ("aiomysql", "dotenv")
 )
 if HAS_DEPENDENCIES:
-    from core import db_core
+    from core.memory import db_core
 
 
 @unittest.skipUnless(HAS_DEPENDENCIES, "Instala aiomysql y python-dotenv.")
@@ -40,8 +40,8 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0)
             return self.pool
 
-        with patch("core.db_core.load_dotenv"), patch(
-            "core.db_core.aiomysql.create_pool", new=AsyncMock(side_effect=create_pool),
+        with patch("core.memory.db_core.load_dotenv"), patch(
+            "core.memory.db_core.aiomysql.create_pool", new=AsyncMock(side_effect=create_pool),
         ) as create:
             pools = await asyncio.gather(*(
                 db_core.inicializar_motor_datos() for _ in range(4)
@@ -89,10 +89,10 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.pool.release.assert_called_once_with(self.conn)
 
     async def test_connection_failure_does_not_leave_a_pool(self) -> None:
-        with patch("core.db_core.load_dotenv"), patch(
-            "core.db_core.aiomysql.create_pool",
+        with patch("core.memory.db_core.load_dotenv"), patch(
+            "core.memory.db_core.aiomysql.create_pool",
             new=AsyncMock(side_effect=ConnectionError("expected")),
-        ), self.assertLogs("core.db_core", level="CRITICAL"):
+        ), self.assertLogs("core.memory.db_core", level="CRITICAL"):
             with self.assertRaises(ConnectionError):
                 await db_core.inicializar_motor_datos()
         self.assertIsNone(db_core._pool)

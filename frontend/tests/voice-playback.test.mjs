@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { VoicePlayback } from '../src/voice-playback.js';
+import { VoicePlayback } from '../src/voice/voice-playback.js';
 
 const originalAudio = globalThis.Audio;
 const originalContext = globalThis.AudioContext;

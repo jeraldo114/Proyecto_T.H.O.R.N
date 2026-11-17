@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
-import { PcmMicrophone } from '../src/microphone.js';
+import { PcmMicrophone } from '../src/voice/microphone.js';
 
 test('Worklet produce PCM little-endian correcto y no reproduce entrada', async () => {
-  const source = await readFile(new URL('../src/microphone-worklet.js', import.meta.url), 'utf8');
+  const source = await readFile(new URL('../src/voice/microphone-worklet.js', import.meta.url), 'utf8');
   let Processor;
   const messages = [];
   vm.runInNewContext(source, {

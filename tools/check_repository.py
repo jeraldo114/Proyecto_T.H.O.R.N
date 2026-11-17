@@ -99,7 +99,7 @@ def local_secret_variants() -> list[bytes]:
     env_path = ROOT / ".env"
     variants: set[bytes] = set()
     values = dict(dotenv_values(env_path, interpolate=False)) if env_path.exists() else {}
-    from core.secure_storage import load_vault, vault_path, encode64
+    from core.security.secure_storage import load_vault, vault_path, encode64
     if vault_path(ROOT).exists():
         vault = load_vault(ROOT)
         values.update(vault.secrets)
@@ -109,12 +109,12 @@ def local_secret_variants() -> list[bytes]:
         from thorn_web.credentials import root_credential
         values['THORN_API_TOKEN'] = root_credential(ROOT)
     if (ROOT / 'data/security/release-signing.dpapi').is_file():
-        from core.secure_files import sealed_read
+        from core.security.secure_files import sealed_read
         raw_signer = sealed_read(ROOT, 'release-signing.dpapi')
         variants.update((raw_signer, base64.b64encode(raw_signer)))
     recovery = ROOT / 'data/recovery/thorn-recovery.key'
     if recovery.is_file():
-        from core.secure_files import read_private
+        from core.security.secure_files import read_private
         raw_recovery = read_private(recovery, root=ROOT, maximum=16384)
         variants.update((raw_recovery, base64.b64encode(raw_recovery)))
     for key, value in values.items():

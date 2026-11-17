@@ -86,8 +86,8 @@ origen; style-src admite estilos inline para dimensiones dinamicas y Three.js.
 | `frontend/index.html` | Estructura del centro de mando y sus dialogos. |
 | `frontend/src/hud.css` | Diseno responsive, colores, tipografia y estados. |
 | `frontend/src/hud.js` | Consultas async, autenticacion en memoria y controles. |
-| `frontend/src/core-scene.js` | Emblema Three.js, interaccion y limite a 30 FPS. |
-| `frontend/src/model.js` | Formatos y reglas de historial, sin muestras artificiales. |
+| `frontend/src/ui/core-scene.js` | Emblema Three.js, interaccion y limite a 30 FPS. |
+| `frontend/src/state/model.js` | Formatos y reglas de historial, sin muestras artificiales. |
 | `frontend/build.mjs` | Compila recursos locales y un manifiesto cerrado. |
 | `api/hud.py` | Lee los recursos en un hilo, los cachea y rechaza rutas desconocidas. |
 

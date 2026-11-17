@@ -9,22 +9,22 @@ from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .actions import ActionController
-from .alerts import AlertEngine
-from .audit import AuditStore
-from .events import EventType, ThornEvent
-from .elevenlabs_voice import ElevenLabsVoice, VoiceConfig
-from .local_llm import LocalLanguageModel
-from .speech_input import LocalSpeechInput
-from .internet import InternetService
-from .network_sensor import NetworkSensor
-from .local_voice import LocalVoice
-from .operator import OperatorServices
-from .version import MODEL_PROFILE
-from .conversation_memory import ConversationMemory
+from core.system.actions import ActionController
+from core.system.alerts import AlertEngine
+from core.memory.audit import AuditStore
+from core.events import EventType, ThornEvent
+from core.voice.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
+from core.brain.local_llm import LocalLanguageModel
+from core.voice.speech_input import LocalSpeechInput
+from core.network.internet import InternetService
+from core.network.network_sensor import NetworkSensor
+from core.voice.local_voice import LocalVoice
+from core.brain.operator import OperatorServices
+from core.version import MODEL_PROFILE
+from core.memory.conversation_memory import ConversationMemory
 
 if TYPE_CHECKING:
-    from .runtime import ThornRuntime
+    from core.runtime import ThornRuntime
 
 
 class AssistantServices:

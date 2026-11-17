@@ -75,7 +75,7 @@ superan, la herramienta falla explícitamente; no recorta el archivo en silencio
 
 «Thorn» no es una palabra del español. En texto libre Vosk la escribe como «tom»,
 «son», «don», «fourth» o la omite. Por eso, mientras espera el nombre, el servidor
-usa una **gramática cerrada** sobre el modelo pequeño (`core/speech_input.py`):
+usa una **gramática cerrada** sobre el modelo pequeño (`core/voice/speech_input.py`):
 solo puede elegir entre «thorn», «oye/hola thorn», palabras comunes que suenan
 parecido («toma», «torre», «tormenta», «son», «por»…) y `[unk]`. Si el nombre
 abre la frase, recorta el audio en ese punto y transcribe **solo lo dicho
@@ -93,8 +93,8 @@ la tuya: mide con tus grabaciones antes de confiar en ella.
 El manifiesto es una lista `{"wav": "...", "wake": true|false}` con WAV mono PCM16
 de 16 kHz. Incluye negativas que empiecen parecido («toma nota», «torre», «son
 las tres»). Si falta el modelo pequeño, el HUD vuelve al filtro por alias
-(`frontend/src/wake-word.js`), cuya lista debe coincidir con `WAKE_ALIASES` de
-`core/commands.py`; `tests/test_wake_word.py` lo comprueba. Al detectar el nombre
+(`frontend/src/voice/wake-word.js`), cuya lista debe coincidir con `WAKE_ALIASES` de
+`core/brain/commands.py`; `tests/test_wake_word.py` lo comprueba. Al detectar el nombre
 suena un tono breve si la lectura automática está activa.
 
 No es un detector dedicado de bajo consumo: el VAD y el micrófono siguen activos
@@ -108,7 +108,7 @@ Marca **Interrumpir hablando** antes de iniciar la conversación. Durante la
 respuesta el micrófono queda abierto con cancelación de eco y:
 
 1. Al primer indicio de voz, Thorn baja su volumen al 15 % (no espera la transcripción).
-2. Se transcribe lo que dijiste y se clasifica (`frontend/src/barge-in.js`):
+2. Se transcribe lo que dijiste y se clasifica (`frontend/src/voice/barge-in.js`):
    - «Espera», «para», «silencio», con o sin el nombre: **pausa**; «sigue» la
      retoma, incluidas las frases que faltaban.
    - Eco de su propia voz (la mayoría de las palabras ya estaban en la respuesta),
@@ -128,8 +128,8 @@ no una promesa de latencia total: también cuentan STT, el modelo, TTS y el equi
 ### Voz por frases
 
 Con Piper, la respuesta se sintetiza frase a frase: la primera suena antes y la
-siguiente se prepara mientras suena la actual (`frontend/src/speech-queue.js`).
-Antes de sintetizar, `core/speech_text.py` quita marcado, citas `[1]` y URL,
+siguiente se prepara mientras suena la actual (`frontend/src/voice/speech-queue.js`).
+Antes de sintetizar, `core/voice/speech_text.py` quita marcado, citas `[1]` y URL,
 pronuncia «12,5 gigabytes», «23 milisegundos» y «Thorn» en lugar de deletrear
 «T.H.O.R.N». Lo que ves en el HUD no cambia.
 

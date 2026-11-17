@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from core.speech_text import MAX_SPOKEN, for_speech
+from core.voice.speech_text import MAX_SPOKEN, for_speech
 
 
 class SpeechTextTests(unittest.TestCase):

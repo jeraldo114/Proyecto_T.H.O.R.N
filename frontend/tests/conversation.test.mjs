@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ConversationLoop } from '../src/conversation.js';
+import { ConversationLoop } from '../src/voice/conversation.js';
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
 function harness(overrides = {}) {

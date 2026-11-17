@@ -11,12 +11,13 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from core.actions import ActionController
-from core.alerts import AlertEngine, AlertRule
-from core.audit import AuditStore
+from core.system.actions import ActionController
+from core.system.alerts import AlertEngine, AlertRule
+from core.memory.audit import AuditStore
 from core.event_bus import EventBus
 from core.events import EventType, ThornEvent
-from core.local_llm import LocalLanguageModel, validate_endpoint
+from core.brain.local_llm import LocalLanguageModel
+from core.loopback import validate_endpoint
 from core.runtime import ThornRuntime
 
 
@@ -187,7 +188,7 @@ class ActionTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.actions._pending)
 
     async def test_standard_user_gate_fails_closed(self) -> None:
-        with patch("core.actions.windows_actions_allowed", return_value=False):
+        with patch("core.system.actions.windows_actions_allowed", return_value=False):
             controller = ActionController(self.audit, executor=self.executed.append)
         self.assertFalse(controller.enabled)
         self.assertEqual(controller.catalog(), [])
@@ -301,7 +302,7 @@ class ServiceLifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_disabled_audit_does_not_connect(self) -> None:
         audit = AuditStore(enabled=False)
-        with patch("core.audit.db_session", side_effect=AssertionError("no IO")):
+        with patch("core.memory.audit.db_session", side_effect=AssertionError("no IO")):
             await audit.initialize()
             self.assertIsNone(await audit.append("test", "observed", "test"))
             self.assertEqual(await audit.history(), [])
@@ -348,7 +349,7 @@ class ProgressiveReplyTests(unittest.IsolatedAsyncioTestCase):
         model = LocalLanguageModel(MemoryAudit(), endpoint="http://127.0.0.1:11434", model="test:local",
                                    transport=httpx.MockTransport(handle))
         self.addAsyncCleanup(model.stop)
-        with self.assertLogs("core.local_llm", level="WARNING") as logs:
+        with self.assertLogs("core.brain.local_llm", level="WARNING") as logs:
             result = await model.ask("Prueba con acentos: cámara", context={"nota": "situación"}, query_id="t",
                                      progress=lambda delta: None)
         self.assertEqual(sent[0]["options"]["num_ctx"], 4096)

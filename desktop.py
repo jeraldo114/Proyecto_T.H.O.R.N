@@ -241,7 +241,7 @@ def run_desktop(*, without_database: bool, smoke_test: bool, background: bool) -
 
 def main() -> int:
     if sys.argv[1:] == ["--document-worker"]:
-        from core.document_worker import main as document_main
+        from core.documents.worker import main as document_main
         return document_main()
     parser = argparse.ArgumentParser(description=f"T.H.O.R.N {RELEASE} - escritorio Windows")
     parser.add_argument("--sin-db", action="store_true")

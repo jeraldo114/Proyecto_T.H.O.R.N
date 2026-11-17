@@ -1,7 +1,7 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { MicVAD } from '@ricky0123/vad-web/dist/real-time-vad.js';
-import { ConversationCapture, toPcm16, MAX_SAMPLES } from '../src/conversation-vad.js';
+import { ConversationCapture, toPcm16, MAX_SAMPLES } from '../src/voice/conversation-vad.js';
 
 const originalNew = MicVAD.new, originalContext = globalThis.AudioContext;
 const originalMedia = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');

@@ -15,7 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 from core.event_bus import EventBusClosedError
 from core.events import EventType, ThornEvent
 from core.runtime import RuntimeState, ThornRuntime
-from core.sessions import authorize
+from core.security.sessions import authorize
 from core.version import RELEASE
 
 ALLOWED_EVENT_TYPES = {EventType.COMMAND_RECEIVED, EventType.SYSTEM_ALERT}

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { panelPixels, panelPosition, initialPosition } from '../src/panel-layout.js';
-import { WorkspaceClient } from '../src/workspace.js';
+import { panelPixels, panelPosition, initialPosition } from '../src/ui/panel-layout.js';
+import { WorkspaceClient } from '../src/state/workspace.js';
 
 test('ventanas acotan NaN, extremos y pantallas menores que su tamaño', () => {
   assert.deepEqual(panelPixels({ x: Infinity, y: -2 }, { width: 500, height: 300 }, { width: 700, height: 400 }), { x: 0, y: 0 });

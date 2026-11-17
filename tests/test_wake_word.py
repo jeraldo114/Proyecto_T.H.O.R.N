@@ -7,14 +7,14 @@ import re
 import unittest
 from pathlib import Path
 
-from core.commands import WAKE_ALIASES, command_intent, strip_wake
+from core.brain.commands import WAKE_ALIASES, command_intent, strip_wake
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class WakeWordTests(unittest.TestCase):
     def test_frontend_and_backend_share_the_same_aliases(self) -> None:
-        source = (ROOT / "frontend" / "src" / "wake-word.js").read_text(encoding="utf-8")
+        source = (ROOT / "frontend" / "src" / "voice" / "wake-word.js").read_text(encoding="utf-8")
         match = re.search(r"export const WAKE_ALIASES = (\[[^\]]*\]);", source)
         self.assertIsNotNone(match, "wake-word.js debe exportar WAKE_ALIASES como lista literal")
         aliases = json.loads(match[1].replace("'", '"'))

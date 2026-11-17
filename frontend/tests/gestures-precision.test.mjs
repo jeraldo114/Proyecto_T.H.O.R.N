@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GestureInterpreter } from '../src/gestures.js';
+import { GestureInterpreter } from '../src/vision/gestures.js';
 function palm() {
   const p = Array.from({ length: 21 }, () => ({ x: .5, y: .6 }));
   for (const i of [8, 12, 16, 20]) p[i].y = .1;

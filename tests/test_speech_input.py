@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 import zipfile
 
-from core.speech_input import LocalSpeechInput, MAX_PCM_BYTES, SAMPLE_RATE, WAKE_GRAMMAR, wake_end
+from core.voice.speech_input import LocalSpeechInput, MAX_PCM_BYTES, SAMPLE_RATE, WAKE_GRAMMAR, wake_end
 from tests.test_assistant import MemoryAudit
 from tools.install_speech_model import NAME, validate_archive
 

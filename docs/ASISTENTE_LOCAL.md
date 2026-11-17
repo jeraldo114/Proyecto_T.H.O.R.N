@@ -22,13 +22,13 @@ TTS en nube ni ejecucion Windows. Ver [Voz ElevenLabs](VOZ_ELEVENLABS.md) y
 
 | Archivo | Funcion |
 | --- | --- |
-| core/alerts.py | Detecta presion sostenida y su recuperacion, sin avisos repetidos. |
-| core/audit.py | Escribe historial, reglas y notas en MySQL con parametros SQL. |
-| core/actions.py | Prepara acciones conocidas y exige una confirmacion de un solo uso. |
-| core/local_llm.py | Consulta Ollama de forma async y valida su respuesta JSON. |
-| core/personality.py | Define tono propio, verdad, permisos y perfil vocal original. |
-| core/elevenlabs_voice.py | Sintetiza texto con HTTP async; mantiene audio acotado en RAM. |
-| core/speech_input.py | Transcribe dictado local en workers, sin grabaciones persistentes. |
+| core/system/alerts.py | Detecta presion sostenida y su recuperacion, sin avisos repetidos. |
+| core/memory/audit.py | Escribe historial, reglas y notas en MySQL con parametros SQL. |
+| core/system/actions.py | Prepara acciones conocidas y exige una confirmacion de un solo uso. |
+| core/brain/local_llm.py | Consulta Ollama de forma async y valida su respuesta JSON. |
+| core/brain/personality.py | Define tono propio, verdad, permisos y perfil vocal original. |
+| core/voice/elevenlabs_voice.py | Sintetiza texto con HTTP async; mantiene audio acotado en RAM. |
+| core/voice/speech_input.py | Transcribe dictado local en workers, sin grabaciones persistentes. |
 | tools/elevenlabs_voice.py | Lista voces y disena/guarda una voz original con confirmacion explicita. |
 | core/services.py | Une estos servicios al ciclo de vida del runtime. |
 | api/assistant.py | Protege las rutas privadas y valida sus contratos. |

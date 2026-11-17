@@ -8,7 +8,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv, set_key
 from core.paths import data_root
-from core.secure_storage import SECRET_NAMES, StorageUnavailable, load_vault, vault_path
+from core.security.secure_storage import SECRET_NAMES, StorageUnavailable, load_vault, vault_path
 
 BASE_DIR = data_root()
 

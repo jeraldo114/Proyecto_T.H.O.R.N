@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
-from core.audit import AuditStore
+from core.memory.audit import AuditStore
 
 
 class AuditTests(unittest.IsolatedAsyncioTestCase):
@@ -18,7 +18,7 @@ class AuditTests(unittest.IsolatedAsyncioTestCase):
         @asynccontextmanager
         async def session():
             yield self.conn, self.cur
-        self.patch = patch("core.audit.db_session", session)
+        self.patch = patch("core.memory.audit.db_session", session)
         self.patch.start()
         self.addCleanup(self.patch.stop)
         self.audit = AuditStore(enabled=True)

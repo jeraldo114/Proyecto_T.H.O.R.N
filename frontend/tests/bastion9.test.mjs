@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { GestureInterpreter } from '../src/gestures.js';
-import { LocalCamera } from '../src/camera.js';
-import { WorkspaceClient, operatorIntent, localControl } from '../src/workspace.js';
-import { assistantState } from '../src/assistant-state.js';
+import { GestureInterpreter } from '../src/vision/gestures.js';
+import { LocalCamera } from '../src/vision/camera.js';
+import { WorkspaceClient, operatorIntent, localControl } from '../src/state/workspace.js';
+import { assistantState } from '../src/ui/assistant-state.js';
 
 function palm() {
   const points = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.6 }));

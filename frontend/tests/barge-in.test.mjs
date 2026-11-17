@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classifyInterruption, looksLikeEcho } from '../src/barge-in.js';
-import { stripWakeWord, WakeWordGate } from '../src/wake-word.js';
+import { classifyInterruption, looksLikeEcho } from '../src/voice/barge-in.js';
+import { stripWakeWord, WakeWordGate } from '../src/voice/wake-word.js';
 
 test('clasifica pausa, asentimientos, eco y una orden nueva', () => {
   const spoken = 'La CPU está al 12 % y la memoria RAM al 40 %. Todo parece estable.';
@@ -32,7 +32,7 @@ test('el nombre incluye los errores medidos del STT sin tocar palabras completas
 });
 
 test('los números de la respuesta se comparan como los escribe el STT', async () => {
-  const { numberWords } = await import('../src/barge-in.js');
+  const { numberWords } = await import('../src/voice/barge-in.js');
   assert.deepEqual([0, 16, 21, 40, 45, 100, 115, 999, 1000, 2026].map(numberWords),
     ['cero', 'dieciseis', 'veintiuno', 'cuarenta', 'cuarenta y cinco', 'cien', 'ciento quince',
       'novecientos noventa y nueve', 'mil', 'dos mil veintiseis']);

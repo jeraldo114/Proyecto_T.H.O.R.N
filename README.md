@@ -215,9 +215,9 @@ Las acciones de Windows siguen necesitando su confirmación independiente.
 
 | Carpeta | Qué estoy poniendo ahí |
 | --- | --- |
-| `core/` | Núcleo asíncrono, sensores, IA, voz, sesiones y persistencia. |
+| `core/` | Runtime y bus en la raíz; `brain/`, `voice/`, `network/`, `memory/`, `security/`, `system/` y `documents/` por dominio. |
 | `api/` y `thorn_web/` | API local, permisos y arranque del servidor Django ASGI. |
-| `frontend/` | HUD, ventanas, audio, cámara y gestos. |
+| `frontend/` | HUD: `src/` separado en `voice/`, `network/`, `documents/`, `vision/`, `ui/` y `state/`. |
 | `tools/` | Instaladores, acceso local, respaldos, compilación y firma. |
 | `tests/` | Pruebas del backend; las del HUD están en `frontend/tests/`. |
 | `docs/` | Notas, decisiones y pasos de instalación. |

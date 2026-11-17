@@ -11,11 +11,11 @@ from django.test import override_settings
 
 from tests import test_web as web
 from tests.test_assistant import MemoryAudit
-from core.actions import ActionController
-from core.local_llm import LocalLanguageModel
-from core.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
+from core.system.actions import ActionController
+from core.brain.local_llm import LocalLanguageModel
+from core.voice.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
 from core.runtime import ThornRuntime
-from core.speech_input import LocalSpeechInput, MAX_PCM_BYTES, TRANSCRIBE_PATH
+from core.voice.speech_input import LocalSpeechInput, MAX_PCM_BYTES, TRANSCRIBE_PATH
 from thorn_web.lifespan import ThornASGI
 
 
@@ -214,7 +214,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 403)
 
     async def test_local_voice_uses_wav_without_cloud_authorization(self) -> None:
-        from core.local_voice import LocalVoice
+        from core.voice.local_voice import LocalVoice
         from tests.test_local_autonomy import wav_fixture
         await self.services.voice.stop()
         self.services.voice = LocalVoice(self.audit, enabled=True, loader=lambda path: object(),
@@ -228,7 +228,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('texto privado', json.dumps(self.audit.rows))
 
     async def test_web_consent_is_required_and_normal_chat_stays_local(self) -> None:
-        from core.internet import InternetService
+        from core.network.internet import InternetService
         from tests.test_network import FakeWebClient
         client = FakeWebClient({})
         await self.services.internet.stop()
@@ -246,7 +246,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
 
     async def test_web_sources_return_without_model_and_without_private_context_or_actions(self) -> None:
         from unittest.mock import AsyncMock
-        from core.internet import InternetService
+        from core.network.internet import InternetService
         from tests.test_network import FakeWebClient
         client = FakeWebClient({"query": {"pages": [{"title": "Fuente", "index": 1,
             "fullurl": "https://es.wikipedia.org/wiki/Fuente", "extract": "Informacion real de la fuente."}]}})

@@ -12,8 +12,8 @@ import wave
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from core.local_voice import LocalVoice, MAX_AUDIO, BoundedAudio
-from core.sessions import SessionAuthority, authorize
+from core.voice.local_voice import LocalVoice, MAX_AUDIO, BoundedAudio
+from core.security.sessions import SessionAuthority, authorize
 from thorn_web.credentials import dpapi, root_credential
 from tests.test_assistant import MemoryAudit
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SessionClient } from '../src/session.js';
+import { SessionClient } from '../src/state/session.js';
 const payload = suffix => ({ access_token: `thn_${suffix.repeat(64)}`, expires_in: 900,
   session_id: suffix.repeat(32), scopes: ['telemetry:read'] });
 

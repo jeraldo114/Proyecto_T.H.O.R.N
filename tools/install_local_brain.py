@@ -10,9 +10,10 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.local_llm import CONTEXT_TOKENS, REPLY_TOKENS, validate_endpoint
-from core.personality import PERSONALITY
-from core.brain_host import LocalBrainHost
+from core.brain.local_llm import CONTEXT_TOKENS, REPLY_TOKENS
+from core.loopback import validate_endpoint
+from core.brain.personality import PERSONALITY
+from core.brain.brain_host import LocalBrainHost
 from core.version import MODEL_PROFILE
 
 

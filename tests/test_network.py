@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, patch
 import httpcore
 
 from core.event_bus import EventBus
-from core.internet import InternetService, extract_page
-from core.network_sensor import NetworkSensor
-from core.public_web import MAX_BODY, PublicNetworkBackend, PublicWebClient, public_address, public_url
+from core.network.internet import InternetService, extract_page
+from core.network.network_sensor import NetworkSensor
+from core.network.public_web import MAX_BODY, PublicNetworkBackend, PublicWebClient, public_address, public_url
 from tests.test_assistant import MemoryAudit
 
 
@@ -285,7 +285,7 @@ class SensorTests(unittest.IsolatedAsyncioTestCase):
 
 class WebSummaryTests(unittest.IsolatedAsyncioTestCase):
     async def test_untrusted_sources_cannot_suggest_an_os_action(self) -> None:
-        from core.local_llm import LocalLanguageModel
+        from core.brain.local_llm import LocalLanguageModel
         import httpx
         bodies = []
         def handler(request: httpx.Request) -> httpx.Response:

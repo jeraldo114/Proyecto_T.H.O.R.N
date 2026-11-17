@@ -8,10 +8,10 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from core.runtime import ThornRuntime
-from core.speech_input import MAX_PCM_BYTES, TRANSCRIBE_PATH
-from core.sessions import authorize
-from core.documents import MAX_VISION_REQUEST_BYTES, UPLOAD_PATH, VISION_PATH
-from core.document_worker import MAX_PDF_BYTES
+from core.voice.speech_input import MAX_PCM_BYTES, TRANSCRIBE_PATH
+from core.security.sessions import authorize
+from core.documents.service import MAX_VISION_REQUEST_BYTES, UPLOAD_PATH, VISION_PATH
+from core.documents.worker import MAX_PDF_BYTES
 
 logger = logging.getLogger(__name__)
 ASGIMessage = dict[str, Any]

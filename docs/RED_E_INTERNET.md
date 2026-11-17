@@ -122,12 +122,12 @@ solo admitia dos conexiones y la tercera podia fallar por esperar turno.
 
 | Archivo | Responsabilidad |
 | --- | --- |
-| core/network_sensor.py | Lee psutil y rutas nativas en un worker cada 2 segundos. |
-| core/public_web.py | GET HTTPS, TLS, DNS validado y conexion fijada a IP publica. |
-| core/internet.py | Consentimiento, limites, buscadores, extraccion de texto y auditoria. |
+| core/network/network_sensor.py | Lee psutil y rutas nativas en un worker cada 2 segundos. |
+| core/network/public_web.py | GET HTTPS, TLS, DNS validado y conexion fijada a IP publica. |
+| core/network/internet.py | Consentimiento, limites, buscadores, extraccion de texto y auditoria. |
 | core/services.py | Resume fuentes sin incluir memoria ni datos privados del operador. |
-| core/local_llm.py | Para resumen web solo acepta suggested_action=null. |
-| frontend/src/network.js | Presenta tasas, enlaces seguros y ordenes explicitas de red. |
+| core/brain/local_llm.py | Para resumen web solo acepta suggested_action=null. |
+| frontend/src/network/network.js | Presenta tasas, enlaces seguros y ordenes explicitas de red. |
 | api/assistant.py | Rutas privadas con contratos de campos cerrados. |
 
 El parser HTML es el de la biblioteca estandar y se ejecuta fuera del loop.

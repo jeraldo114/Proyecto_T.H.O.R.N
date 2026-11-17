@@ -15,8 +15,8 @@ import psutil
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.commands import normalize
-from core.speech_input import MAX_SECONDS, MODEL_PATH, SAMPLE_RATE, _decode, _load_model
+from core.brain.commands import normalize
+from core.voice.speech_input import MAX_SECONDS, MODEL_PATH, SAMPLE_RATE, _decode, _load_model
 
 
 def edits(reference: list[str], actual: list[str]) -> int:
