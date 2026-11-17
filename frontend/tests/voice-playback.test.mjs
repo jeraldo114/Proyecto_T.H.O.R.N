@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { VoicePlayback } from '../src/voice/voice-playback.js';
+import { DUCK_LEVEL, VoicePlayback } from '../src/voice/voice-playback.js';
 
 const originalAudio = globalThis.Audio;
 const originalContext = globalThis.AudioContext;
@@ -159,9 +159,9 @@ test('bajar la voz mientras el operador habla conserva el volumen elegido', asyn
   player.setVolume(0.8);
   await player.start(new Blob(['first']));
   player.duck(true);
-  assert.equal(instances[0].volume, 0.8 * 0.15);
+  assert.equal(instances[0].volume, 0.8 * DUCK_LEVEL);
   await player.start(new Blob(['second']));
-  assert.equal(instances[1].volume, 0.8 * 0.15, 'la frase siguiente empieza también atenuada');
+  assert.equal(instances[1].volume, 0.8 * DUCK_LEVEL, 'la frase siguiente empieza también atenuada');
   player.duck(false);
   assert.equal(instances[1].volume, 0.8);
   player.stop();

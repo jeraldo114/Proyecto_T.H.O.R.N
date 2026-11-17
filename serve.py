@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 import uvicorn
 
 from core.logging_config import queued_logging
+from core.version import PRODUCT, RELEASE
 
 if TYPE_CHECKING:
     from thorn_web.lifespan import ThornASGI
@@ -49,7 +50,7 @@ async def _serve(*, port: int, without_database: bool) -> None:
 
 def main() -> int:
     """Entrada de consola; escribe los logs desde un hilo dedicado."""
-    parser = argparse.ArgumentParser(description="API local de T.H.O.R.N Bastion 8")
+    parser = argparse.ArgumentParser(description=f"API local de {PRODUCT} {RELEASE}")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--sin-db", action="store_true")
     args = parser.parse_args()

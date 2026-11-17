@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import csv
-import ctypes
 import hashlib
 import io
 import os

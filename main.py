@@ -1,4 +1,4 @@
-"""Entrada local de T.H.O.R.N Bastion 8. Requiere Python 3.11 o superior."""
+"""Entrada local de T.H.O.R.N para probar el nucleo desde consola. Requiere Python 3.11 o superior."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import signal
 from core.events import EventType, ThornEvent
 from core.logging_config import queued_logging
 from core.runtime import ThornRuntime
+from core.version import PRODUCT, RELEASE
 
 logger = logging.getLogger("thorn")
 
@@ -52,7 +53,7 @@ async def _main(*, demo: bool, use_database: bool, use_system_sensor: bool = Tru
 
 def main() -> int:
     """Configura logs fuera del loop y ejecuta el supervisor asincrono."""
-    parser = argparse.ArgumentParser(description="T.H.O.R.N - Bastion 8")
+    parser = argparse.ArgumentParser(description=f"{PRODUCT} - {RELEASE}")
     parser.add_argument("--demo", action="store_true", help="Procesa un evento y termina.")
     parser.add_argument(
         "--sin-db", action="store_true", help="Ejecuta el bus sin conectar a MySQL.",

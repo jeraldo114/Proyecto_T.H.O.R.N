@@ -1,4 +1,4 @@
-# Asistente local - Bastion 8
+# Asistente local
 
 ## Estado real
 
@@ -102,7 +102,7 @@ Un evento command.received sigue siendo un mensaje, no una orden shell.
 ## Modelo de texto local
 
 La configuracion predeterminada es THORN_LLM_URL=http://127.0.0.1:11434 y
-THORN_LLM_MODEL=thorn:bastion8. Crear el perfil con tools/install_local_brain.py
+THORN_LLM_MODEL=thorn:bastion9. Crear el perfil con tools/install_local_brain.py
 sobre Qwen ya instalado. Instalar Ollama/modelos es un paso independiente;
 el arranque de T.H.O.R.N no descarga nada. Con Ollama instalado, iniciarlo en
 modo solo local en otra consola:

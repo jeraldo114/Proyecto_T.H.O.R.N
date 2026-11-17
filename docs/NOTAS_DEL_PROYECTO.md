@@ -1,6 +1,6 @@
 # Notas para entender T.H.O.R.N
 
-T.H.O.R.N es el asistente. Bastion 8 es el nombre de su version de actualizacion.
+T.H.O.R.N es el asistente. Bastion 9 es el nombre de su version de actualizacion actual.
 El backend se ejecuta localmente en Python; Django agrega una puerta HTTP para
 conectar el HUD con ese backend. La ventana Windows reutiliza el HUD mediante WebView2.
 

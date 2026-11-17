@@ -26,7 +26,7 @@ export function numberWords(value) {
   return `${thousands === 1 ? '' : `${UNITS[thousands]} `}mil${n % 1000 ? ` ${numberWords(n % 1000)}` : ''}`;
 }
 
-export function words(value) {
+function words(value) {
   return plain(value).replace(/%/g, ' por ciento ').replace(/\d+/g, digits => ` ${numberWords(digits)} `)
     .replace(/[^a-z0-9ñ\s]/g, ' ').split(/\s+/).filter(Boolean);
 }

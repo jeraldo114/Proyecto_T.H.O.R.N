@@ -1,4 +1,4 @@
-# Red e Internet - Bastion 8
+# Red e Internet
 
 ## Que esta disponible
 

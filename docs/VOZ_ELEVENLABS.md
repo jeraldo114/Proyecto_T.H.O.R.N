@@ -1,4 +1,7 @@
-# Voz de T.H.O.R.N / Bastion 8
+# Voz en la nube con ElevenLabs (opcional)
+
+La voz predeterminada es Piper, local y sin cuentas. Esta guia solo aplica si
+desactivas `THORN_LOCAL_AI_ONLY` y eliges `THORN_VOICE_PROVIDER=elevenlabs`.
 
 ## Que esta preparado
 
