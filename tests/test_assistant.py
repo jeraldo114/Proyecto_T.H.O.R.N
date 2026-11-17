@@ -203,6 +203,19 @@ class ActionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class LanguageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cold_start_does_not_repeat_failed_ollama_launch(self) -> None:
+        def unavailable(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("offline", request=request)
+
+        model = LocalLanguageModel(MemoryAudit(), endpoint="http://127.0.0.1:11434", model="test:local",
+                                   transport=httpx.MockTransport(unavailable))
+        self.addAsyncCleanup(model.stop)
+        with patch.dict("os.environ", {"THORN_BRAIN_AUTOSTART": "1"}), patch.object(
+                model.host, "start", new=AsyncMock(return_value=False)) as start:
+            await model.start()
+            start.assert_awaited_once()
+            self.assertEqual(model.state, "engine_unavailable")
+
     async def make_model(self, handler: object) -> LocalLanguageModel:
         model = LocalLanguageModel(MemoryAudit(), endpoint="http://127.0.0.1:11434",
                                    model="test:local", transport=httpx.MockTransport(handler))
@@ -319,3 +332,27 @@ class ProgressiveReplyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("".join(fragments), result["reply"])
         self.assertEqual(fragments[0], "Primera frase. ")
         self.assertIsNone(result["suggested_action"])
+        self.assertEqual(result["tokens"], {"prompt": None, "output": None, "context": 4096})
+
+    async def test_reports_token_usage_and_uses_the_larger_context(self) -> None:
+        sent = []
+
+        def handle(request):
+            if request.url.path == "/api/tags":
+                return httpx.Response(200, json={"models": [{"name": "test:local"}]})
+            sent.append(json.loads(request.content))
+            return httpx.Response(200, content=json.dumps({
+                "message": {"content": '{"reply":"Listo.","suggested_action":null}'}, "done": True,
+                "prompt_eval_count": 3900, "eval_count": 12}) + "\n")
+
+        model = LocalLanguageModel(MemoryAudit(), endpoint="http://127.0.0.1:11434", model="test:local",
+                                   transport=httpx.MockTransport(handle))
+        self.addAsyncCleanup(model.stop)
+        with self.assertLogs("core.local_llm", level="WARNING") as logs:
+            result = await model.ask("Prueba con acentos: cámara", context={"nota": "situación"}, query_id="t",
+                                     progress=lambda delta: None)
+        self.assertEqual(sent[0]["options"]["num_ctx"], 4096)
+        self.assertIn("situación", sent[0]["messages"][0]["content"], "el contexto ya no escapa los acentos")
+        self.assertEqual(result["tokens"], {"prompt": 3900, "output": 12, "context": 4096})
+        self.assertEqual(model.status["last_tokens"]["prompt"], 3900)
+        self.assertIn("al limite", logs.output[0])

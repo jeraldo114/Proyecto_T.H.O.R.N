@@ -110,6 +110,24 @@ class NetworkSensor:
                 "fresh": bool(not self.closed and not self.failed and age is not None and 0 <= age <= max(6, self.interval * 3)),
                 "age_seconds": age, "samples": self.samples, "errors": self.errors}
 
+    def offline(self) -> bool:
+        """True solo con una muestra vigente sin ninguna interfaz activa con direccion utilizable.
+
+        Loopback y enlace local (169.254, fe80) no cuentan. Una IPv6 global sin puerta de
+        enlace IPv4 si cuenta: no declaramos desconexion por no ver un gateway IPv4.
+        """
+        if not self.status["fresh"] or self.snapshot is None:
+            return False
+        for item in self.snapshot["interfaces"]:
+            for address in item["addresses"] if item["up"] else []:
+                try:
+                    value = ipaddress.ip_address(address.split("%")[0])
+                except ValueError:
+                    continue
+                if not value.is_loopback and not value.is_link_local:
+                    return False
+        return True
+
     async def start(self) -> None:
         if not self.task and not self.closed:
             self.task = asyncio.create_task(self._run(), name="thorn.sensor.network")

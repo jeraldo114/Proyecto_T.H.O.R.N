@@ -158,6 +158,18 @@ try {
   await page.waitForFunction(() => document.querySelector('#conversation-bar').dataset.state === 'permission_required');
   await page.waitForTimeout(2200);
   assert.equal(await page.evaluate(() => window.testDeniedCalls), 1); assert(await closed());
+  // Pausa y continuación reutilizan el mismo clip ya autorizado.
+  await page.setViewportSize({ width: 1440, height: 960 });
+  const previousSpeech = speech;
+  await page.locator('#speak-reply-button').click();
+  await page.waitForFunction(() => document.querySelector('#reply-voice-result').textContent.includes('Reproduciendo'));
+  await page.locator('#command-input').fill('Espera');
+  await page.locator('#command-form').evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => document.querySelector('#reply-voice-result').textContent.includes('Audio en pausa'));
+  await page.locator('#command-input').fill('Sigue');
+  await page.locator('#command-form').evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => document.querySelector('#reply-voice-result').textContent.includes('Reproduciendo'));
+  assert.equal(speech, previousSpeech + 1, 'Sigue reutiliza el mismo clip');
   assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
   assert.equal((await context.cookies()).length, 0); assert.deepEqual(external, []); assert.deepEqual(errors, []);
   console.log(`Conversacion E2E correcta: Silero real, ${process.env.THORN_MIC_LIVE === '1' ? 'Vosk real' : 'STT simulado'}, turnos seriales, autoarranque, RMS, cancelacion y responsive; IA/TTS simuladas, sin cargos.`);

@@ -53,7 +53,8 @@ class AssistantServices:
             self.voice.state = "policy_blocked" if provider == "elevenlabs" else "invalid_configuration"
         self.microphone = LocalSpeechInput(self.audit)
         self.conversation_auto_start = os.getenv("THORN_CONVERSATION_AUTO_START", "0") == "1"
-        self.internet = InternetService(self.audit, runtime.bus)
+        # La red local avisa antes de esperar a que el DNS falle por tiempo.
+        self.internet = InternetService(self.audit, runtime.bus, offline=lambda: self.network.offline())
         self.network = NetworkSensor(runtime.bus)
         self.operator = OperatorServices(self)
         runtime.sessions.on_release(self.operator.store.release)
@@ -111,7 +112,8 @@ class AssistantServices:
                     # orden. Su resumen recibe extractos y carece de acciones OS.
                     answer = await self.language.ask(question, query_id=result["request_id"], context={
                         "web_sources_untrusted": [{"number": index, "title": source["title"][:100],
-                            "excerpt": source["excerpt"][:1500 if len(sources) == 1 else 430]}
+                            "excerpt": source["excerpt"][:1500 if len(sources) == 1 else 430],
+                            "retrieved_at": source.get("retrieved_at"), "published_at_declared": source.get("published_at")}
                             for index, source in enumerate(sources, 1)],
                         "retrieved_at": result["retrieved_at"], "actions_available": False})
                     reply, method = answer["reply"][:1800], "local_llm"

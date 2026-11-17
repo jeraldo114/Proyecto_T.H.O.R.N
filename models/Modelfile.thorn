@@ -1,6 +1,6 @@
 # Perfil de T.H.O.R.N: reutiliza pesos locales; no es entrenamiento nuevo.
 FROM qwen2.5:1.5b
-PARAMETER num_ctx 2048
+PARAMETER num_ctx 4096
 PARAMETER num_predict 384
 PARAMETER temperature 0.2
 SYSTEM """

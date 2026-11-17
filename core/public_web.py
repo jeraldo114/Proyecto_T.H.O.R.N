@@ -13,6 +13,7 @@ import httpcore
 import httpx
 
 MAX_BODY = 1024 * 1024
+MAX_CONNECTIONS = 4
 Resolver = Callable[[str, int], Awaitable[list[str]]]
 
 
@@ -118,8 +119,10 @@ class PublicWebClient:
                     raise RuntimeError("web_closed")
                 if self.pool is None:
                     context = await asyncio.to_thread(ssl.create_default_context)
+                    # NOTA DEL OPERADOR: «Investiga» lee hasta 3 fuentes a la vez. Con 2
+                    # conexiones la tercera esperaba turno 1 s y fallaba con PoolTimeout.
                     self.pool = httpcore.AsyncConnectionPool(ssl_context=context, network_backend=self.backend,
-                        max_connections=2, max_keepalive_connections=1, keepalive_expiry=5, retries=0)
+                        max_connections=MAX_CONNECTIONS, max_keepalive_connections=2, keepalive_expiry=15, retries=0)
             for hop in range(4):
                 headers = [(b"User-Agent", b"THORN-Bastion9/0.9 (+https://github.com/jeraldo114/Proyecto_T.H.O.R.N)"),
                            (b"Accept-Encoding", b"identity"),
@@ -129,7 +132,7 @@ class PublicWebClient:
                         raise ValueError("web_public_https_required")
                     headers.append((b"X-Subscription-Token", brave_key.encode("ascii")))
                 async with self.pool.stream("GET", url, headers=headers,
-                    extensions={"timeout": {"connect": 4, "read": 4, "write": 4, "pool": 1}}) as response:
+                    extensions={"timeout": {"connect": 4, "read": 4, "write": 4, "pool": 6}}) as response:
                     meta = {key.lower(): val for key, val in response.headers}
                     if response.status in {301, 302, 303, 307, 308}:
                         if brave_key or hop == 3 or b"location" not in meta:

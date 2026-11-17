@@ -57,7 +57,8 @@ def private(handler: Handler) -> Callable[[ASGIRequest], Awaitable[HttpResponse]
             allowed.update({"web_busy", "web_disabled", "web_closed", "web_invalid_configuration",
                             "web_provider_unavailable", "web_redirect_rejected", "web_rate_limited",
                             "web_unsupported_content", "web_response_too_large", "web_invalid_response",
-                            "web_empty_content", "web_missing_search_key"})
+                            "web_empty_content", "web_missing_search_key", "web_offline",
+                            "web_local_search_unavailable", "web_local_search_json_disabled"})
             code = str(exc) if str(exc) in allowed else "service_unavailable"
             return JsonResponse({"error": code}, status=409 if code.endswith("busy") else 503)
         except Exception as exc:
@@ -240,6 +241,7 @@ async def web_result(request: ASGIRequest, services: AssistantServices, data: di
     generation = state.generation
     epoch = await services.operator.memory_epoch(scopes)
     async def work() -> dict[str, object]:
+        state.research_selection = state.pending_note = None
         if read:
             result = await services.internet.read(data["url"], consent=data["internet_consent"], identity=uuid4().hex)
             prompt = "Resume la pagina adjunta y senala sus limites."
@@ -251,6 +253,10 @@ async def web_result(request: ASGIRequest, services: AssistantServices, data: di
         saved = await services.operator.save_turn(prompt, answer["reply"], "internet", scopes, epoch)
         services.operator.ensure_current(owner, state, generation)
         services.operator.store.remember(owner, state, prompt, answer["reply"])
+        # Conserva únicamente el último conjunto entregado en esta sesión.
+        state.research_sources = list(answer["sources"][:3])
+        state.compared_sources.clear()
+        state.research_selection = state.pending_note = None
         panel = services.operator.store.add_panel(owner, "sources", "Fuentes consultadas", {
             "sources": answer["sources"], "text": answer["reply"]}, source="internet")
         return {**answer, "panel": panel, "ui_commands": [], "memory": saved}
@@ -312,8 +318,10 @@ async def transcribe(request: ASGIRequest, services: AssistantServices) -> JsonR
         raise ValueError("microphone_local_consent_required")
     if request.content_type != "application/octet-stream":
         raise ValueError("microphone_pcm_required")
+    # "wake": el servidor confirma «Thorn» con gramatica y solo transcribe lo dicho despues.
+    mode = request.headers.get("X-Thorn-Speech-Mode", "dictation")
     started = monotonic()
-    result = await services.microphone.transcribe(request.body, local_consent=True, request_id=uuid4().hex)
+    result = await services.microphone.transcribe(request.body, local_consent=True, request_id=uuid4().hex, mode=mode)
     response = JsonResponse({**result, "transcription_ms": round((monotonic() - started) * 1000, 2)})
     response["Cache-Control"] = "no-store"
     response["X-Content-Type-Options"] = "nosniff"

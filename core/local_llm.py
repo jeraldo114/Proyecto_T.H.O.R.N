@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
-from urllib.parse import urlsplit
 from collections.abc import Callable
 
 import httpx
@@ -17,19 +17,17 @@ from .audit import AuditStore
 from .personality import system_prompt
 from .brain_host import LocalBrainHost
 
+logger = logging.getLogger(__name__)
+# NOTA DEL OPERADOR: el presupuesto de abajo se mide en bytes (hasta 6800) y el
+# modelo cuenta tokens. Con 2048 tokens, prompt + 384 de respuesta podia pasarse
+# y Ollama recortaba sin avisar. 4096 deja margen: en Qwen2.5 1.5B la cache KV
+# extra ronda 60 MB. Ollama informa prompt_eval_count; lo registramos para medir.
+CONTEXT_TOKENS = 4096
+REPLY_TOKENS = 384
 
-def validate_endpoint(value: str) -> str:
-    """No permite DNS, proxies, credenciales, redireccionamientos ni hosts remotos."""
-    try:
-        url = urlsplit(value)
-        port = url.port
-    except ValueError:
-        raise ValueError("invalid_local_endpoint") from None
-    if (url.scheme != "http" or url.hostname not in {"127.0.0.1", "::1"}
-            or not port or url.username or url.password or url.path not in {"", "/"}
-            or url.query or url.fragment):
-        raise ValueError("local_loopback_endpoint_required")
-    return value.rstrip("/")
+
+# Compartida con el buscador local; se conserva aqui el nombre que usan las herramientas.
+from .loopback import validate_endpoint  # noqa: E402,F401
 
 
 # Solo publicamos el prefijo de reply; las propuestas esperan al JSON validado.
@@ -54,12 +52,15 @@ class LocalLanguageModel:
         self._closed = False
         self._last_recovery = float("-inf")
         self.audit_errors = 0
+        self.last_tokens: dict[str, int | None] | None = None
         self.endpoint = endpoint
         self.host = LocalBrainHost()
 
     async def start(self) -> None:
         """Puede iniciar el motor ya instalado; no instala pesos ni consume APIs."""
         if os.getenv("THORN_BRAIN_AUTOSTART", "0") == "1" and self.endpoint == "http://127.0.0.1:11434":
+            # Un intento de arranque cuenta también para el intervalo de recuperación.
+            self._last_recovery = time.monotonic()
             await self.host.start()
             await self.probe()
 
@@ -67,7 +68,7 @@ class LocalLanguageModel:
     def status(self) -> dict[str, object]:
         return {"state": self.state, "model": self.model, "busy": self._query_lock.locked(),
                 "available": self.state == "ready" and not self._closed,
-                "audit_errors": self.audit_errors}
+                "audit_errors": self.audit_errors, "last_tokens": self.last_tokens}
 
     async def _json(self, method: str, path: str, *, body: object = None, timeout: float = 60) -> object:
         async with asyncio.timeout(timeout):
@@ -117,7 +118,9 @@ class LocalLanguageModel:
                                 progress(prefix[emitted:])
                                 emitted = len(prefix)
                         if event.get("done") is True:
-                            return {"done": True, "message": {"content": content}}
+                            return {"done": True, "message": {"content": content},
+                                    "prompt_eval_count": event.get("prompt_eval_count"),
+                                    "eval_count": event.get("eval_count")}
         raise ValueError("incomplete_model_response")
 
     async def probe(self) -> dict[str, object]:
@@ -209,8 +212,7 @@ class LocalLanguageModel:
                 payload = {
                     "model": model, "stream": progress is not None, "format": schema,
                     "keep_alive": "2m" if model == self.model else 0,
-                    "options": {"num_ctx": 2048 if model == self.model else 4096, "num_predict": 384,
-                                                        "temperature": 0.2},
+                    "options": {"num_ctx": CONTEXT_TOKENS, "num_predict": REPLY_TOKENS, "temperature": 0.2},
                     "messages": [{"role": "system", "content": system}, *recent,
                                  {"role": "user", "content": prompt.strip()}],
                 }
@@ -233,6 +235,13 @@ class LocalLanguageModel:
                     raise ValueError("model_action_not_allowed")
                 if untrusted_document and action is not None:
                     raise ValueError("model_action_not_allowed")
+                tokens = {"prompt": result.get("prompt_eval_count"), "output": result.get("eval_count"),
+                          "context": CONTEXT_TOKENS}
+                if not all(type(value) is int for value in tokens.values()):
+                    tokens = {"prompt": None, "output": None, "context": CONTEXT_TOKENS}
+                elif tokens["prompt"] + REPLY_TOKENS > CONTEXT_TOKENS:
+                    logger.warning("Contexto del modelo al limite: %s de %s tokens.", tokens["prompt"], CONTEXT_TOKENS)
+                self.last_tokens = tokens
             except asyncio.CancelledError:
                 await self._audit("cancelled", query_id)
                 raise
@@ -243,7 +252,7 @@ class LocalLanguageModel:
                 raise RuntimeError("model_query_failed") from None
             await self._audit("answered", query_id)
             return {"reply": reply, "suggested_action": action, "query_id": query_id,
-                    "model": model, "executed": False, "memory_sources": [
+                    "model": model, "executed": False, "tokens": tokens, "memory_sources": [
                         {"id": item["id"], "date": item["date"], "category": item.get("category", "conversacion")}
                         for item in memories if isinstance(item, dict) and "id" in item and "date" in item
                     ]}

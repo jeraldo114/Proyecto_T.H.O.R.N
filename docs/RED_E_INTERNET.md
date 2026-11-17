@@ -76,6 +76,48 @@ Revisa las condiciones y cuotas de Brave antes de configurarlo. Si falta la clav
 la UI informa FALTA API KEY y permite seguir leyendo URLs publicas. No se cambia
 de proveedor de forma silenciosa ni se usa scraping de buscadores como alternativa.
 
+### Buscador propio: SearXNG local
+
+Para busqueda web general **sin claves ni pagos**, puedes correr tu propio
+SearXNG en esta PC. Thorn lo consulta solo por loopback (`127.0.0.1`), sin DNS,
+proxies ni redirecciones; SearXNG consulta a su vez motores publicos. En Fedora:
+
+```bash
+podman run -d --name searxng -p 127.0.0.1:8888:8080 docker.io/searxng/searxng
+```
+
+Activa el formato JSON en su `settings.yml` (`search: formats: [html, json]`) y
+reinicia el contenedor. Luego, en el .env privado:
+
+```dotenv
+THORN_SEARCH_PROVIDER=searxng
+THORN_SEARXNG_URL=http://127.0.0.1:8888
+```
+
+Si el contenedor no responde, la UI dice que el buscador local no esta iniciado;
+si rechaza JSON, indica que falta habilitarlo. Las URLs que devuelve se validan
+igual que las de cualquier proveedor: solo HTTPS publico.
+
+### Diagnostico por etapas
+
+**Probar conexion HTTPS** mide `example.com` y el host del buscador configurado
+(Wikipedia o Brave) a la vez, y dice en que etapa fallo:
+
+| Etapa | Que significa |
+| --- | --- |
+| Sin red local | Ninguna interfaz activa tiene una direccion utilizable (solo loopback o 169.254). |
+| DNS | Hay red local, pero la resolucion de nombres no responde. |
+| DNS privado | Un nombre publico resolvio a una IP privada: portal cautivo o DNS que filtra. |
+| Conexion | El DNS funciona, pero no se abre la conexion: cortafuegos o router. |
+| TLS | Se llego al servidor, pero su certificado no fue valido: proxy que intercepta o reloj del equipo. |
+| Tiempo agotado | El destino no respondio a tiempo: red lenta o inestable. |
+
+Si el sensor local ve que no hay ninguna direccion utilizable, las busquedas y
+lecturas fallan al instante con «Sin red» en vez de esperar 15 s al DNS. El
+sensor no declara desconexion por faltar un gateway IPv4: una red solo IPv6 sigue
+contando como red. «Investiga» lee sus tres fuentes en paralelo; antes el cliente
+solo admitia dos conexiones y la tercera podia fallar por esperar turno.
+
 ## Como esta dividido
 
 | Archivo | Responsabilidad |

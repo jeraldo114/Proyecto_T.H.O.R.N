@@ -137,3 +137,32 @@ test('el nucleo recibe RMS de muestras reales y vuelve a cero al detener', async
     assert.equal(frame, null);
   } finally { globalThis.requestAnimationFrame = originalRaf; globalThis.cancelAnimationFrame = originalCancel; }
 });
+
+test('pausar libera el turno y sigue desde el mismo audio sin sintetizar de nuevo', async () => {
+  const player = new VoicePlayback(() => {});
+  await player.start(new Blob(['audio']));
+  const current = player.audio;
+  current.currentTime = 3;
+  const first = player.finished;
+  assert(player.pause());
+  assert.equal(await first, 'paused');
+  await player.resume();
+  assert.equal(player.state, 'playing');
+  assert.equal(player.audio, current);
+  assert.equal(current.currentTime, 3);
+  assert.equal(instances.length, 1);
+  player.stop();
+});
+
+test('bajar la voz mientras el operador habla conserva el volumen elegido', async () => {
+  const player = new VoicePlayback(() => {});
+  player.setVolume(0.8);
+  await player.start(new Blob(['first']));
+  player.duck(true);
+  assert.equal(instances[0].volume, 0.8 * 0.15);
+  await player.start(new Blob(['second']));
+  assert.equal(instances[1].volume, 0.8 * 0.15, 'la frase siguiente empieza también atenuada');
+  player.duck(false);
+  assert.equal(instances[1].volume, 0.8);
+  player.stop();
+});

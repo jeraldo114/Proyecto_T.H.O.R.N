@@ -80,6 +80,24 @@ try {
   await page.locator('#command-input').fill('busca en internet cifrado'); await page.locator('#command-form').evaluate(form => form.requestSubmit());
   await page.waitForFunction(() => document.querySelector('#console-text').textContent.startsWith('Resumen de prueba'));
   await page.locator('#close-console').click();
+  mode = 'slow';
+  const beforePause = requests;
+  const starting = page.waitForRequest(request => request.url().endsWith('/web/search/'));
+  await page.locator('#command-input').fill('investiga sobre cámaras');
+  await page.locator('#command-form').evaluate(form => form.requestSubmit());
+  await starting;
+  await page.locator('#command-input').fill('Espera');
+  await page.locator('#command-form').evaluate(form => form.requestSubmit());
+  await page.waitForFunction(() => document.querySelector('#reply-voice-result').textContent.includes('Investigación en pausa'));
+  mode = 'ok';
+  const retrying = page.waitForRequest(request => request.url().endsWith('/web/search/'));
+  await page.locator('#command-input').fill('Sigue');
+  await page.locator('#command-form').evaluate(form => form.requestSubmit());
+  const retry = await retrying;
+  assert.deepEqual(retry.postDataJSON(), { internet_consent: true, query: 'cámaras', investigate: true });
+  await page.waitForFunction(() => document.querySelector('#console-text').textContent.startsWith('Resumen de prueba'));
+  assert.equal(requests, beforePause + 2, 'Sigue hace una única solicitud nueva');
+  await page.locator('#close-console').click();
   for (const width of [320, 390, 768, 1440, 1920]) {
     await page.setViewportSize({ width, height: width < 600 ? 844 : 960 });
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Sin overflow en ${width}.`);

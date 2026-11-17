@@ -111,6 +111,28 @@ class PublicWebTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(RuntimeError, error):
                 await client.get("https://example.com")
 
+    async def test_three_slow_sources_are_read_together_without_pool_timeouts(self) -> None:
+        # «Investiga» lee tres fuentes a la vez: con 2 conexiones y 1 s de espera
+        # en el pool, la tercera fallaba si las otras tardaban mas de un segundo.
+        class SlowStream(RecordingStream):
+            async def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+                await asyncio.sleep(1.3)
+                return await super().read(max_bytes, timeout)
+
+        backend = RecordingBackend([response(b"<p>uno</p>"), response(b"<p>dos</p>"), response(b"<p>tres</p>")])
+        backend.connect_tcp = lambda host, port, **kwargs: _slow(backend, host, port)
+
+        async def _slow(owner: RecordingBackend, host: str, port: int) -> httpcore.AsyncNetworkStream:
+            owner.connections.append((host, port))
+            return SlowStream(owner.responses.pop(0), owner)
+
+        client = PublicWebClient(backend=PublicNetworkBackend(resolver=AsyncMock(return_value=["93.184.216.34"]),
+                                                              backend=backend))
+        self.addAsyncCleanup(client.stop)
+        results = await asyncio.gather(*(client.get(f"https://fuente{index}.example/") for index in range(3)))
+        self.assertEqual(len(results), 3)
+        self.assertEqual(len(backend.connections), 3)
+
     async def test_brave_secret_never_follows_redirect_or_goes_to_other_domain(self) -> None:
         client, backend, _ = await self.make_client([response(mime="application/json", status=302, extra=b"Location: https://evil.example.org\r\n")])
         with self.assertRaisesRegex(RuntimeError, "web_redirect_rejected"):
@@ -176,11 +198,13 @@ class InternetTests(unittest.IsolatedAsyncioTestCase):
         ]}}
         client.get = AsyncMock(side_effect=[
             (json.dumps(response).encode(), "application/json", "https://es.wikipedia.org/w/api.php"),
-            (b"<title>Uno</title><p>Pagina consultada</p>", "text/html", "https://es.wikipedia.org/wiki/Uno"),
+            (b'<meta property="article:published_time" content="2026-01-04T10:00:00Z">'
+             b'<title>Uno</title><p>Pagina consultada</p>', "text/html", "https://es.wikipedia.org/wiki/Uno"),
             TimeoutError(),
         ])
         result = await self.service(client).search("numeros", consent=True, identity="test", investigate=True)
         self.assertEqual([source["kind"] for source in result["sources"]], ["page", "search"])
+        self.assertEqual(result["sources"][0]["published_at"], "2026-01-04")
         self.assertEqual(result["sources"][1]["excerpt"], "Segundo")
         self.assertEqual(client.get.await_count, 3)
 

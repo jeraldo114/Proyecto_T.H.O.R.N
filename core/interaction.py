@@ -25,6 +25,13 @@ class InteractionState:
     revision: int = 0
     generation: int = 0
     phase: str = "ready"
+    resume_choices: tuple[float, tuple[int, ...]] | None = None
+    research_sources: list[dict[str, object]] = field(default_factory=list)
+    compared_sources: list[dict[str, object]] = field(default_factory=list)
+    research_selection: float | None = None
+    research_writing: bool = False
+    pending_note: tuple[float, str] | None = None
+    undo_note: str | None = None
 
 
 class InteractionStore:
@@ -128,6 +135,9 @@ class InteractionStore:
     def cancel(self, owner: str, *, clear: bool = False) -> bool:
         state = self.state(owner, touch=True)
         state.generation += 1
+        state.resume_choices = None
+        state.research_selection = None
+        state.pending_note = None
         task = self.tasks.get(owner)
         active = task is not None and not task.done()
         if active:
@@ -135,6 +145,9 @@ class InteractionStore:
         state.phase = "ready"
         if clear:
             state.turns.clear()
+            state.research_sources.clear()
+            state.compared_sources.clear()
+            state.undo_note = None
             state.panels.clear()
             state.revision += 1
         return active

@@ -1,4 +1,6 @@
 // Salida de audio: conserva el WAV/MP3 bloqueado sin solicitar otra sintesis.
+// Volumen relativo mientras el operador habla encima de la respuesta.
+export const DUCK_LEVEL = 0.15;
 export class VoicePlayback {
   constructor(onState, onLevel = () => {}) {
     this.onState = onState;
@@ -23,7 +25,17 @@ export class VoicePlayback {
   setVolume(value) {
     if (!Number.isFinite(value) || value < 0 || value > 1) return;
     this.volume = value;
-    if (this.audio) this.audio.volume = value;
+    this.applyVolume();
+  }
+
+  /** Baja la voz mientras el operador empieza a hablar; no pausa ni descarta el clip. */
+  duck(active) {
+    this.ducked = Boolean(active);
+    this.applyVolume();
+  }
+
+  applyVolume() {
+    if (this.audio) this.audio.volume = this.volume * (this.ducked ? DUCK_LEVEL : 1);
   }
 
   stop() {
@@ -60,7 +72,7 @@ export class VoicePlayback {
     this.finished = new Promise(resolve => { this.finishResolve = resolve; });
     this.url = URL.createObjectURL(blob);
     this.audio = new Audio(this.url);
-    this.audio.volume = this.volume;
+    this.applyVolume();
     this.audio.addEventListener('ended', () => {
       if (revision !== this.revision) return;
       this.finishResolve?.('ended'); this.finishResolve = null;
@@ -83,8 +95,23 @@ export class VoicePlayback {
     await this.play(revision);
   }
 
+  pause() {
+    if (this.state !== 'playing' || !this.audio) return false;
+    this.audio.pause();
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.frame = null;
+    this.onLevel(0);
+    this.finishResolve?.('paused'); this.finishResolve = null;
+    this.notify('paused');
+    return true;
+  }
+
   async resume() {
-    if (this.state === 'blocked' && this.audio) await this.play(this.revision);
+    if (!this.audio || !['blocked', 'paused'].includes(this.state)) return;
+    if (this.state === 'paused') {
+      this.finished = new Promise(resolve => { this.finishResolve = resolve; });
+    }
+    await this.play(this.revision);
   }
 
   async play(revision) {
@@ -120,6 +147,30 @@ export class VoicePlayback {
       if (error.name === 'NotAllowedError') this.notify('blocked');
       else { this.finishResolve?.('playback_error'); this.finishResolve = null; this.stop(); this.notify('playback_error'); }
     }
+  }
+
+  /** Tono breve de «te escucho» al detectar el nombre. No usa el clip ni su analizador. */
+  async cue() {
+    const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (!Context || this.volume === 0) return false;
+    let context;
+    try {
+      context = new Context();
+      await context.resume();
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(this.volume * 0.08, context.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.26);
+      gain.connect(context.destination);
+      for (const [frequency, offset] of [[660, 0], [880, 0.09]]) {
+        const tone = context.createOscillator();
+        tone.frequency.value = frequency; tone.connect(gain);
+        tone.start(context.currentTime + offset); tone.stop(context.currentTime + offset + 0.16);
+      }
+      await new Promise(resolve => setTimeout(resolve, 300));
+      return true;
+    } catch { return false; }
+    finally { void context?.close().catch(() => {}); }
   }
 
   async testOutput() {

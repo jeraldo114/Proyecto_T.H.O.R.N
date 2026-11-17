@@ -12,5 +12,6 @@ export class LazyConversationCapture {
     if (this.closed) this.capture.stop();
   }
   async pause() { await this.capture?.pause(); }
+  rearm() { return !this.closed && Boolean(this.capture?.rearm()); }
   stop() { this.closed = true; this.capture?.stop(); }
 }

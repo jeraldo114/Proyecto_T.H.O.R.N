@@ -188,6 +188,14 @@ class ConversationMemory:
                            "source": source, "category": category(turn["prompt"]), **turn})
         return result
 
+    async def turn(self, identity: int) -> dict[str, object] | None:
+        """Relee un turno por ID al confirmar una elección efímera."""
+        self.require()
+        async with db_session() as (_, cur):
+            await cur.execute("SELECT id,identity,created_at,source,payload FROM thorn_conversation WHERE id=%s", (identity,))
+            row = await cur.fetchone()
+        return (await self.decode_rows([row]))[0] if row else None
+
     async def page(self, *, before: int | None = None, limit: int = 20,
                    query: str = "") -> dict[str, object]:
         """Paginación por clave: ni OFFSET creciente ni todo el chat en RAM."""

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -11,7 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from .commands import coordinate, normalize
+from .commands import coordinate, normalize, strip_wake
 from .documents import DocumentService
 from .interaction import InteractionState, InteractionStore
 from .maps import find_places
@@ -110,22 +109,44 @@ class OperatorServices:
 
     async def command(self, owner: str, intent: dict[str, str], scopes: frozenset[str]) -> dict[str, object]:
         kind = intent["type"]
-        if kind == "resume_topic":
+        if kind in {"resume_topic", "resume_choice"}:
             if "memory:read" not in scopes:
                 raise ValueError("command_scope_required")
             if not self.preferences.value["memory_context_enabled"]:
                 return self.result("Activa el uso de recuerdos como contexto en Preferencias para retomar un tema.")
-            rows = (await self.services.conversations.page(query=intent["topic"], limit=3))["records"]
-            if not rows:
-                return self.result("No encontré conversaciones archivadas sobre ese tema.")
-            latest = rows[0]
             state = self.store.state(owner, touch=True)
+            generation = state.generation
+            if kind == "resume_choice":
+                pending = state.resume_choices
+                index = int(intent["choice"]) - 1
+                if not pending or self.store.clock() > pending[0] or index >= len(pending[1]):
+                    return self.result("Esa opción ya no está disponible. Dime qué tema quieres retomar.")
+                state.resume_choices = None
+                latest = await self.services.conversations.turn(pending[1][index])
+                if latest is None:
+                    return self.result("Ese recuerdo ya no está disponible.")
+            else:
+                state.resume_choices = None
+                rows = (await self.services.conversations.page(query=intent["topic"], limit=3))["records"]
+                self.ensure_current(owner, state, generation)
+                if not rows:
+                    return self.result("No encontré conversaciones archivadas sobre ese tema.")
+                distinct_by_prompt = {}
+                for row in rows:
+                    distinct_by_prompt.setdefault(normalize(row["prompt"]), row)
+                distinct = list(distinct_by_prompt.values())
+                if len(distinct) > 1:
+                    state.resume_choices = (self.store.clock() + 90, tuple(row["id"] for row in distinct))
+                    options = "\n".join(f"{i}. {row['created_at'][:10]} · {row['prompt'][:140]}"
+                                         for i, row in enumerate(distinct, 1))
+                    return self.result(f"Encontré varios recuerdos. ¿Cuál quieres retomar? Di «la primera», «la segunda» o «la tercera» si aparece.\n{options}")
+                latest = rows[0]
+            self.ensure_current(owner, state, generation)
             self.store.remember(owner, state, latest["prompt"], latest["reply"])
             return self.result(
                 f"Retomamos desde el turno #{latest['id']}. Me dijiste: {latest['prompt'][:320]}\n"
                 f"Mi última respuesta fue: {latest['reply'][:700]}\n¿Con qué parte seguimos?",
-                memory_sources=[{"id": item["id"], "date": item["created_at"], "category": item["category"]}
-                                for item in rows])
+                memory_sources=[{"id": latest["id"], "date": latest["created_at"], "category": latest["category"]}])
         if kind == "system_review":
             if "telemetry:read" not in scopes:
                 raise ValueError("command_scope_required")
@@ -165,9 +186,20 @@ class OperatorServices:
     async def chat(self, owner: str, prompt: str, scopes: frozenset[str], *, progress: Callable[[str], None] | None = None) -> dict[str, object]:
         if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 2000:
             raise ValueError("invalid_prompt")
+        state = self.store.state(owner, touch=True)
+        if (result := await self.research_dialog(owner, state, prompt, scopes)) is not None:
+            return result
         decision = coordinate(prompt)
         intent = decision.intent
-        if intent and intent["type"] == "resume_topic":
+        choice = {"la primera": "1", "la segunda": "2", "la tercera": "3",
+                  "la uno": "1", "la dos": "2", "la tres": "3"}.get(normalize(prompt))
+        if state.resume_choices and choice:
+            intent = {"type": "resume_choice", "choice": choice}
+        elif not intent or intent["type"] != "resume_topic":
+            state.resume_choices = None
+        if intent and intent["type"] == "clarify":
+            return self.result(intent["reply"], topic_for=intent.get("topic_for"))
+        if intent and intent["type"] in {"resume_topic", "resume_choice"}:
             return await self.run(owner, lambda: self.command(owner, intent, scopes))
         if intent:
             epoch = await self.memory_epoch(scopes)
@@ -175,6 +207,93 @@ class OperatorServices:
             result["memory"] = await self.save_turn(prompt, result["reply"], "command", scopes, epoch)
             return result
         return await self.run(owner, lambda: self.answer(owner, prompt, scopes, progress=progress))
+
+    async def research_dialog(self, owner: str, state: InteractionState, prompt: str,
+                              scopes: frozenset[str]) -> dict[str, object] | None:
+        """Referencias acotadas a fuentes de la sesión y notas creadas aquí."""
+        phrase = strip_wake(normalize(prompt))
+        if state.research_writing:
+            raise RuntimeError("interaction_busy")
+        now = self.store.clock()
+        pending = state.pending_note
+        state.pending_note = None
+        if pending and now < pending[0]:
+            if phrase in {"si", "confirmo", "si guardalo", "confirma", "confirmar pendiente"}:
+                if "memory:write" not in scopes or "network:query" not in scopes:
+                    raise ValueError("command_scope_required")
+                if self.services.audit.cipher is None:
+                    raise RuntimeError("secure_storage_unavailable")
+                generation = state.generation
+                state.research_writing = True
+                try:
+                    identity = await self.services.audit.update_memory(text=pending[1])
+                finally:
+                    state.research_writing = False
+                if self.is_current(owner, state, generation):
+                    state.undo_note = identity
+                return self.result("Guardé el pendiente en tu memoria. Puedes decir «deshaz el último cambio».")
+            if phrase in {"no", "cancela", "no lo guardes", "cancelar"}:
+                return self.result("Cancelé el guardado del pendiente.")
+        if phrase in {"deshaz el ultimo cambio", "deshacer el ultimo cambio", "deshaz el pendiente"}:
+            if "memory:write" not in scopes:
+                raise ValueError("command_scope_required")
+            if not state.undo_note:
+                return self.result("En esta sesión no hay un pendiente reciente que pueda deshacer.")
+            identity = state.undo_note
+            state.research_writing = True
+            try:
+                await self.services.audit.update_memory(delete_id=identity)
+            except ValueError as error:
+                if str(error) != "memory_not_found":
+                    raise
+                state.undo_note = None
+                return self.result("Ese pendiente ya había sido eliminado.")
+            finally:
+                state.research_writing = False
+            state.undo_note = None
+            return self.result("Deshice el guardado del último pendiente.")
+        selection = state.research_selection
+        state.research_selection = None
+        ordinals = {"primera": 0, "segunda": 1, "tercera": 2, "uno": 0, "dos": 1, "tres": 2,
+                    "1": 0, "2": 1, "3": 2}
+        ordinal_pattern = r"(primera|segunda|tercera|uno|dos|tres|[123])"
+        reference = rf"(?:la |el )?{ordinal_pattern}"
+        pick = re.fullmatch(rf"(?:guarda|guardar|anota) (?:{reference}(?: o {reference})? )?como pendiente", phrase)
+        follow = re.fullmatch(reference, phrase)
+        pair = re.fullmatch(rf"compara {reference} (?:con|y) {reference}", phrase)
+        first_two = phrase in {"compara las dos primeras", "compara las primeras dos", "compara los dos primeros"}
+        compare = pair or first_two or phrase in {"compara las fuentes", "compara estas fuentes", "comparalas"}
+        if not compare and not pick and not (selection and now < selection and follow):
+            return None
+        state.resume_choices = None
+        if "network:query" not in scopes or (not compare and "memory:write" not in scopes):
+            raise ValueError("command_scope_required")
+        sources = state.research_sources
+        if not sources:
+            return self.result("Primero investiga un tema para que pueda identificar sus fuentes.")
+        if compare:
+            if len(sources) < 2:
+                return self.result("La última investigación solo tiene una fuente. Necesito al menos dos para compararlas.")
+            indices = [ordinals[value] for value in pair.groups()] if pair else list(range(2 if first_two else len(sources)))
+            if len(set(indices)) != len(indices) or max(indices) >= len(sources):
+                return self.result(f"Hay {len(sources)} fuentes disponibles. Dime dos números distintos dentro de esa lista.")
+            selected = [sources[index] for index in indices]
+            state.compared_sources = selected
+            lines = [f"[{position}] {item['title']}: {item['excerpt'][:260] or 'Sin extracto disponible.'}"
+                     for position, item in enumerate(selected, 1)]
+            return self.result("Esto dice cada fuente disponible:\n" + "\n".join(lines), sources=selected)
+        sources = state.compared_sources or sources
+        ordinal = (None if pick[2] else pick[1]) if pick else follow[1]
+        if ordinal is None or ordinals[ordinal] >= len(sources):
+            if ordinal is None and len(sources) == 1:
+                ordinal = "primera"
+            else:
+                state.research_selection = now + 60
+                choices = "; ".join(f"{index}. {item['title']}" for index, item in enumerate(sources, 1))
+                return self.result("¿Qué fuente quieres guardar? " + choices)
+        item = sources[ordinals[ordinal]]
+        state.pending_note = (now + 60, f"Pendiente: revisar {item['title']} — {item['url']}"[:1000])
+        return self.result(f"¿Confirmas guardar como pendiente «{item['title']}»? Di «sí» o «no».")
 
     async def memory_epoch(self, scopes: frozenset[str]) -> int | None:
         """No guardar ni recuperar conversaciones de una sesión sin su permiso."""

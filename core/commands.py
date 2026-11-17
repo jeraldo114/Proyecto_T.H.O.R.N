@@ -9,6 +9,15 @@ import re
 import unicodedata
 
 
+# NOTA DEL OPERADOR: formas en que el STT escribe «Thorn». La misma lista vive en
+# frontend/src/wake-word.js; tests/test_wake_word.py falla si dejan de coincidir.
+# «tom» y «ton» solo se aceptan en el HUD al abrir una frase dictada, no aqui:
+# en texto escrito pueden ser un nombre real («Tom Hanks»).
+WAKE_ALIASES = ("thorn", "thorne", "torn", "thor", "tor", "fourth")
+_WAKE_PREFIX = re.compile(r"^(?:" + "|".join(WAKE_ALIASES) + r"|t\.h\.o\.r\.n\.?)\s*[,;:]?\s+", re.I)
+_WAKE_PREFIX_NORMALIZED = re.compile(r"^(?:" + "|".join(WAKE_ALIASES) + r"|t h o r n) ")
+
+
 def normalize(text: str) -> str:
     value = "".join(char for char in unicodedata.normalize("NFD", text.lower())
                     if unicodedata.category(char) != "Mn")
@@ -16,17 +25,32 @@ def normalize(text: str) -> str:
     return " ".join(value.split())
 
 
+def strip_wake(text: str) -> str:
+    """Quita el nombre al inicio de un texto ya normalizado."""
+    return _WAKE_PREFIX_NORMALIZED.sub("", text)
+
+
 def command_intent(text: str) -> dict[str, str] | None:
     """Reconoce frases completas, no una palabra perdida dentro de una pregunta."""
-    raw = re.sub(r"^(?:thorn|t\.h\.o\.r\.n\.?)\s*[,;:]?\s+", "", text.strip(), flags=re.I)
+    raw = _WAKE_PREFIX.sub("", text.strip())
     resume = re.fullmatch(r"(?:retoma|retomemos|continuemos con)\s+(?:el tema de\s+)?([^\r\n]{1,160})", raw, re.I)
     if resume:
         return {"type": "resume_topic", "topic": resume[1].strip(), "reply": ""}
-    value = normalize(text)
-    if value in {"revisa el equipo", "thorn revisa el equipo"}:
-        return {"type": "system_review", "reply": ""}
-    value = re.sub(r"^(?:thorn|t h o r n)\s+", "", value)
+    value = re.sub(r"^t h o r n\s+", "", normalize(raw))
     value = re.sub(r"\s+(?:por favor|gracias)$", "", value)
+    if value == "revisa el equipo":
+        return {"type": "system_review", "reply": ""}
+    clarification = {
+        "retoma": "¿Qué tema quieres retomar?",
+        "retomemos": "¿Qué tema quieres retomar?",
+        "investiga": "¿Qué tema quieres investigar?",
+        "abre": "¿Qué vista o documento quieres abrir?",
+    }.get(value)
+    if clarification:
+        intent = {"type": "clarify", "reply": clarification}
+        if value in {"retoma", "retomemos", "investiga"}:
+            intent["topic_for"] = "research" if value == "investiga" else "resume"
+        return intent
     if value in {"silencio", "detente", "para de hablar", "deja de hablar", "deten la respuesta", "parar respuesta", "espera"}:
         return {"type": "stop_response", "reply": "Respuesta detenida."}
     if value in {"borra el contexto", "olvida esta conversacion", "limpia la conversacion", "reinicia la conversacion"}:
@@ -53,7 +77,7 @@ def command_intent(text: str) -> dict[str, str] | None:
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    route: Literal["control", "interface", "memory", "os_proposal", "reasoning"]
+    route: Literal["control", "interface", "memory", "os_proposal", "reasoning", "clarify"]
     intent: dict[str, str] | None
 
 
@@ -64,6 +88,8 @@ def coordinate(prompt: str) -> Decision:
         return Decision("reasoning", None)
     if intent["type"] in {"stop_response", "clear_context"}:
         return Decision("control", intent)
+    if intent["type"] == "clarify":
+        return Decision("clarify", intent)
     if intent["type"] == "media":
         return Decision("os_proposal", intent)
     if intent.get("view") == "history" or intent["type"] == "resume_topic":

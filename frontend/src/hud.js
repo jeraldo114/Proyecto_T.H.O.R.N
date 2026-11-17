@@ -7,9 +7,10 @@ import { PcmMicrophone } from './microphone.js';
 import { VoicePlayback } from './voice-playback.js';
 import { ConversationLoop } from './conversation.js';
 import { LazyConversationCapture } from './conversation-loader.js';
+import { SpeechQueue, splitSpeech, takeSentence } from './speech-queue.js';
 import { percent, gib, duration, appendSample, eventMatches, eventLabels } from './model.js';
 import { Globe, Search, BookOpen } from 'lucide';
-import { networkIntent, renderNetwork, renderSources } from './network.js';
+import { describeDiagnosis, networkIntent, renderNetwork, renderSources, topicFollowUp } from './network.js';
 import { SessionClient } from './session.js';
 import { OperatorTools } from './operator-tools.js';
 import { operatorIntent, localControl } from './workspace.js';
@@ -38,36 +39,63 @@ let revision = 0, authRevision = 0, statusReceivedAt = 0;
 let capabilities = null, pendingAction = null, proposedAction = null, historyBefore = null;
 let savedRecords = [], rulesLoaded = false, chatBusy = false, nativeSessionUsed = false;
 let speechRevision = 0, speechAbort = null, speechAutomatic = false, speechMessage = '';
+let pausedSpeechRest = '';
 let autoVoiceRevision = 0, replyRevision = 0;
 let microphone = null, microphoneAbort = null, microphoneRevision = 0, microphoneState = 'idle';
 let conversationAutoAttempted = false;
 let chatAbort = null, cancelPending = null;
-let conversationVoiceSettings = null;
+let conversationVoiceSettings = null, pendingTopic = null, activeDraft = '', pausedDraft = '';
+let activeResearch = null, pausedResearch = null;
 let voiceDefaultKey = '';
 const sessions = new SessionClient();
 let desktop = null;
 let networkData = null, networkReceived = 0, webController = null, webRevision = 0, webReply = false;
 const playback = new VoicePlayback(state => {
-  const messages = { playing: 'Reproduciendo / ElevenLabs', blocked: 'Audio listo / reproducción bloqueada por el navegador', ended: 'Reproducción terminada', playback_error: 'El dispositivo no pudo reproducir el audio', testing: 'Reproduciendo tono local', test_finished: 'Tono local finalizado', test_blocked: 'El navegador bloqueó la prueba de salida' };
+  const messages = { paused: 'Audio en pausa / di «sigue»', playing: 'Reproduciendo / ElevenLabs', blocked: 'Audio listo / reproducción bloqueada por el navegador', ended: 'Reproducción terminada', playback_error: 'El dispositivo no pudo reproducir el audio', testing: 'Reproduciendo tono local', test_finished: 'Tono local finalizado', test_blocked: 'El navegador bloqueó la prueba de salida' };
   messages.playing = capabilities?.voice?.cloud ? 'Reproduciendo / ElevenLabs' : 'Reproduciendo / voz local';
   if (messages[state]) setSpeechMessage(messages[state]);
   renderVoice();
   if (conversation.enabled && state === 'blocked') conversation.setState('blocked');
-  if (conversation.enabled && state === 'playing') conversation.setState('speaking');
+  if (conversation.enabled && state === 'playing') {
+    if (voiceTurnStarted !== null) {
+      timings.voiceResponse = Math.round(performance.now() - voiceTurnStarted);
+      voiceTurnStarted = null;
+    }
+    conversation.setState('speaking');
+  }
 }, level => scene.setVoiceLevel(level));
 const conversation = new ConversationLoop({
   createCapture: callbacks => new LazyConversationCapture(callbacks),
   onState: () => { renderConversation(); text('#microphone-result', $('#conversation-state').textContent); renderMicrophone(); renderVoice(); },
   onLevel: ({ level, seconds }) => { scene.setInputLevel(level); $('#microphone-level').value = level; text('#microphone-time', `${seconds.toFixed(1)} / 15 s`); },
-  onText: value => { $('#microphone-text').value = value; },
+  onTurnStart: capturedAt => {
+    voiceTurnStarted = capturedAt;
+    delete timings.voiceResponse;
+    conversationVoiceSettings = { automatic: $('#voice-auto').checked, revision: autoVoiceRevision };
+  },
+  onText: value => {
+    $('#microphone-text').value = value;
+    const preview = value.length > 180 ? value.slice(0, 180) + '…' : value;
+    text('#conversation-heard', value ? `Entendí «${preview}»` : '');
+    $('#conversation-heard').hidden = !value;
+  },
+  onNoMatch: () => {
+    text('#conversation-heard', 'No distinguí palabras. Prueba con una frase más corta.');
+    $('#conversation-heard').hidden = false;
+  },
   onInterrupt: () => {
     const generation = authRevision;
-    void cancelActiveResponse().then(async () => {
+    void pauseActiveResponse().then(async () => {
       if (chatBusy) await new Promise(resolve => setTimeout(resolve, 250));
-      if (generation === authRevision && !document.hidden && !paused) await startConversation();
+      if (generation === authRevision && !document.hidden && !paused) await startConversation({ preserveAudio: true });
     }).catch(() => {});
   },
-  transcribe: (pcm, signal) => transcribePcm(pcm, token, signal),
+  transcribe: (pcm, signal, { wake = false } = {}) => transcribeHeard(pcm, signal, { wake }),
+  // Interrupción: bajar la voz al oírte, comparar con lo que Thorn decía y cortar si es una orden nueva.
+  onDuck: active => playback.duck(active),
+  spokenText: () => $('#console-text').textContent,
+  onReplace: () => { void abortReply().catch(() => {}); },
+  onWake: () => { if ($('#voice-auto').checked && !document.hidden) void playback.cue(); },
   ask: (prompt, signal) => { conversationVoiceSettings = { automatic: $('#voice-auto').checked, revision: autoVoiceRevision }; return askModel(prompt, signal); },
   speak: async (reply, signal) => {
     if (signal.aborted || !conversationVoiceSettings?.automatic || conversationVoiceSettings.revision !== autoVoiceRevision) return;
@@ -301,6 +329,7 @@ async function poll() {
   }
 }
 function disconnect() {
+  pendingTopic = null; pausedDraft = activeDraft = ''; pausedResearch = activeResearch = null;
   revision++; authRevision++;
   chatAbort?.abort(); Object.keys(timings).forEach(key => delete timings[key]); operatorTools.disconnect();
   sessions.close(); voiceDefaultKey = '';
@@ -411,7 +440,7 @@ function serviceError(error) {
     camera_not_started: 'Inicia la cámara local antes de activar los gestos.', insufficient_scope: 'Esta sesión no tiene el permiso necesario.',
     invalid_preferences: 'Revisa las preferencias y el nombre (hasta 60 caracteres).', invalid_timezone: 'La zona horaria no es válida.' };
   if (operatorErrors[error.message]) return operatorErrors[error.message];
-  const webErrors = { web_internet_consent_required: 'Autoriza Internet en Red antes de consultar fuentes externas.', web_disabled: 'Internet está desactivado en el servidor.', web_closed: 'El servicio de Internet está cerrado.', web_busy: 'Hay una consulta web en curso.', web_rate_limited: 'Límite de consultas web. Espera antes de repetir.', web_invalid_query: 'La búsqueda admite hasta 240 caracteres.', web_invalid_url: 'La URL no es válida.', web_public_https_required: 'Solo se permiten URLs HTTPS públicas, sin credenciales ni puertos alternativos.', web_unsupported_content: 'La página no ofrece HTML o texto compatible.', web_redirect_rejected: 'La redirección no está permitida.', web_response_too_large: 'La página supera el límite de 1 MiB.', web_missing_search_key: 'Falta la API key de búsqueda Brave en el servidor.', web_empty_content: 'No se encontró texto legible en esa página.', web_provider_unavailable: 'No se pudo consultar la fuente. Puede estar bloqueada, requerir acceso o no responder.', web_invalid_response: 'La fuente no entregó datos válidos.' };
+  const webErrors = { web_internet_consent_required: 'Autoriza Internet en Red antes de consultar fuentes externas.', web_disabled: 'Internet está desactivado en el servidor.', web_closed: 'El servicio de Internet está cerrado.', web_busy: 'Hay una consulta web en curso.', web_rate_limited: 'Límite de consultas web. Espera antes de repetir.', web_invalid_query: 'La búsqueda admite hasta 240 caracteres.', web_invalid_url: 'La URL no es válida.', web_public_https_required: 'Solo se permiten URLs HTTPS públicas, sin credenciales ni puertos alternativos.', web_unsupported_content: 'La página no ofrece HTML o texto compatible.', web_redirect_rejected: 'La redirección no está permitida.', web_response_too_large: 'La página supera el límite de 1 MiB.', web_missing_search_key: 'Falta la API key de búsqueda Brave en el servidor.', web_empty_content: 'No se encontró texto legible en esa página.', web_provider_unavailable: 'No se pudo consultar la fuente. Puede estar bloqueada, requerir acceso o no responder.', web_invalid_response: 'La fuente no entregó datos válidos.', web_offline: 'Sin red: ninguna interfaz tiene una dirección utilizable. Revisa el Wi-Fi o el cable.', web_local_search_unavailable: 'El buscador local SearXNG no responde. Comprueba que su contenedor esté iniciado.', web_local_search_json_disabled: 'SearXNG rechazó el formato JSON. Actívalo en su settings.yml (search.formats).' };
   if (webErrors[error.message]) return webErrors[error.message];
   if (error.message === 'action_outcome_unrecorded') return 'Windows aceptó la apertura, pero no se pudo completar la auditoría. Comprueba la ventana antes de repetir.';
   return ({ engine_unavailable: 'El motor local Ollama no está disponible.', model_missing: 'El modelo de texto no está instalado en Ollama.', model_busy: 'El modelo está ocupado. Espera la consulta actual.', model_query_failed: 'El modelo no entregó una respuesta válida dentro del plazo.', database_required: 'Esta operación requiere MySQL.', actions_require_windows_and_database: 'Las acciones requieren Windows y auditoría MySQL.', confirmation_expired_or_consumed: 'La confirmación caducó o ya fue utilizada.', action_busy: 'Hay una acción en curso.', action_failed: 'Windows no aceptó la apertura.', unauthorized: 'La sesión privada no es válida.' })[error.message] || 'Servicio no disponible. Comprueba el enlace y la sesión.';
@@ -469,7 +498,7 @@ function cancelWeb() {
   }
   updateNetwork();
 }
-$('#internet-consent').addEventListener('change', () => { if (!$('#internet-consent').checked) cancelWeb(); updateNetwork(); });
+$('#internet-consent').addEventListener('change', () => { if (!$('#internet-consent').checked) { pendingTopic = null; pausedResearch = activeResearch = null; cancelWeb(); } updateNetwork(); });
 $('#web-cancel').addEventListener('click', cancelWeb);
 $('#network-refresh').addEventListener('click', () => poll());
 document.querySelectorAll('input[name=web-mode]').forEach(input => input.addEventListener('change', () => {
@@ -503,16 +532,19 @@ function renderConversation() {
   if (conversation.enabled && (!token || !online || paused || !capabilities?.microphone.available)) stopConversation();
 }
 function stopConversation() {
+  voiceTurnStarted = null;
+  $('#conversation-heard').hidden = true;
+  text('#conversation-heard', '');
   if (!conversation.enabled) return;
   const outputActive = Boolean(speechAbort || playback.active);
   conversation.stop();
   autoVoiceRevision++; stopSpeech();
   if (outputActive) setSpeechMessage('Conversación detenida');
 }
-async function startConversation() {
+async function startConversation({ preserveAudio = false } = {}) {
   if (!token || !online || paused || document.hidden || chatBusy || !capabilities?.microphone.available || !PcmMicrophone.supported()) return;
   conversationAutoAttempted = true;
-  cancelMicrophone(); stopSpeech();
+  cancelMicrophone(); if (!preserveAudio) stopSpeech();
   conversation.requireWake = $('#conversation-wake').checked;
   conversation.bargeIn = $('#conversation-barge').checked && Boolean(navigator.mediaDevices.getSupportedConstraints?.().echoCancellation);
   await conversation.start($('#microphone-device').value);
@@ -520,21 +552,25 @@ async function startConversation() {
 $('#conversation-enabled').addEventListener('change', event => { conversationAutoAttempted = true; if (event.target.checked) void startConversation(); else stopConversation(); });
 $('#conversation-stop').addEventListener('click', stopConversation);
 
-async function transcribePcm(pcm, credential, signal) {
-  credential = await currentCredential();
+/** Con wake=true el servidor busca «Thorn» con gramática y solo transcribe lo dicho después. */
+async function transcribeHeard(pcm, signal, { wake = false } = {}) {
+  const credential = await currentCredential();
   if (signal.aborted) throw new Error('cancelled');
+  const headers = { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/octet-stream', 'X-Thorn-Microphone-Consent': 'local' };
+  if (wake) headers['X-Thorn-Speech-Mode'] = 'wake';
   const response = await fetch('/api/v1/microphone/transcribe/', {
-    method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/octet-stream', 'X-Thorn-Microphone-Consent': 'local' },
-    body: pcm, cache: 'no-store', credentials: 'omit', signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
+    method: 'POST', headers, body: pcm, cache: 'no-store', credentials: 'omit', signal: AbortSignal.any([signal, AbortSignal.timeout(45000)]),
   });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'microphone_transcription_failed');
   if (typeof result.text !== 'string' || result.text.length > 2000 || result.cloud !== false) throw new Error('microphone_transcription_failed');
   timings.transcription = result.transcription_ms;
-  return result.text;
+  return { text: result.text, wake: typeof result.wake === 'boolean' ? result.wake : null };
 }
+async function transcribePcm(pcm, credential, signal) { return (await transcribeHeard(pcm, signal)).text; }
 
 const timings = {};
+let voiceTurnStarted = null;
 async function streamChat(prompt, signal, onDelta) {
   const credential = await currentCredential();
   const response = await fetch('/api/v1/chat/', {
@@ -567,7 +603,39 @@ async function streamChat(prompt, signal, onDelta) {
 async function askModel(prompt, signal, intent = operatorIntent(prompt) || networkIntent(prompt)) {
   if (cancelPending) await cancelPending.catch(() => {});
   if (!token || chatBusy) throw new Error('model_busy');
+  const control = localControl(prompt);
+  if (control === 'continue') {
+    if (playback.state === 'paused') {
+      if (!online || paused || document.hidden || (capabilities?.voice.cloud && !$('#voice-consent').checked)) return '';
+      await resumeSpeech();
+      return '';
+    }
+    if (pausedResearch) {
+      intent = pausedResearch;
+    } else if (pausedDraft) {
+      prompt = 'Continúa el siguiente borrador de respuesta sin repetir su inicio. Borrador: ' + pausedDraft;
+    } else {
+      const reply = 'No tengo una respuesta ni una investigación en pausa.';
+      consoleReply(reply);
+      return reply;
+    }
+  }
+  pausedDraft = activeDraft = '';
+  pausedResearch = null;
+  const pending = pendingTopic;
+  pendingTopic = null;
+  if (pending && /^(?:no|cancela|cancelar|olvídalo|olvidalo)$/iu.test(prompt.trim())) {
+    const reply = 'De acuerdo. Cancelé la pregunta pendiente.';
+    consoleReply(reply);
+    return reply;
+  }
+  if (!intent && (pending?.kind !== 'research' || $('#internet-consent').checked)) {
+    const followUp = topicFollowUp(pending, prompt, performance.now());
+    prompt = followUp?.prompt || prompt;
+    intent = followUp?.intent || null;
+  }
   if (intent && !$('#internet-consent').checked) { const error = new Error('web_internet_consent_required'); consoleReply(serviceError(error)); throw error; }
+  activeResearch = ['search', 'read'].includes(intent?.mode) ? intent : null;
   chatBusy = true; proposedAction = null; $('#suggested-action-button').hidden = true;
   const credential = token, generation = authRevision;
   consoleReply(intent ? 'Consultando fuentes de Internet…' : 'Consultando al modelo local…');
@@ -580,37 +648,43 @@ async function askModel(prompt, signal, intent = operatorIntent(prompt) || netwo
   try {
     const body = intent ? { internet_consent: true, ...(['search', 'map'].includes(intent.mode) ? { query: intent.value, ...(intent.investigate ? { investigate: true } : {}) } : intent.mode === 'read' ? { url: intent.value } : {}) } : { prompt };
     const route = intent ? intent.mode === 'map' ? 'maps/lookup' : intent.mode === 'diagnose' ? 'network/diagnose' : `web/${intent.mode}` : 'chat';
-    let partial = '', spokenUntil = 0, audio = Promise.resolve();
+    let partial = '', spokenUntil = 0, speech = null;
     const voiceRevision = autoVoiceRevision;
     const auto = $('#voice-auto').checked && capabilities?.voice.can_request && !capabilities.voice.cloud && playback.volume > 0;
+    // Una sola cola por respuesta: Piper prepara la frase siguiente mientras suena la actual.
     const queueSpeech = value => {
-      audio = audio.then(async () => {
-        if (activeSignal.aborted || generation !== authRevision || voiceRevision !== autoVoiceRevision) return;
-        await speakText(value, { automatic: true });
-        if (playback.state === 'blocked') { stopSpeech(); setSpeechMessage('Audio bloqueado. Pulsa el botón de lectura para oír la respuesta.'); }
-        else if (playback.active) await playback.finished;
-      });
+      if (activeSignal.aborted || generation !== authRevision || voiceRevision !== autoVoiceRevision) return;
+      speech ??= startSpeech({ automatic: true, signal: activeSignal }) || false;
+      if (speech) speech.push(value);
     };
     const reply = intent ? await api(route, { method: 'POST', body, timeout: 90000, signal: activeSignal })
       : await streamChat(prompt, activeSignal, delta => {
         if (activeSignal.aborted || generation !== authRevision || outputRevision !== replyRevision) return;
         partial += delta;
+        activeDraft = partial.slice(-1500);
         text('#console-text', partial);
         if (!auto) return;
-        const sentence = /^(.*?[.!?])\s+/su.exec(partial.slice(spokenUntil));
-        if (sentence && sentence[1].trim().length >= 16) {
-          queueSpeech(sentence[1].trim()); spokenUntil += sentence[0].length;
+        for (let next; (next = takeSentence(partial.slice(spokenUntil)));) {
+          queueSpeech(next.sentence); spokenUntil = partial.length - next.rest.length;
         }
       });
     if (spokenUntil) {
       const tail = reply.reply.slice(spokenUntil).trim();
       if (tail) queueSpeech(tail);
-      await audio;
+      if (speech && await speech.finish() === 'blocked') {
+        stopSpeech(); setSpeechMessage('Audio bloqueado. Pulsa el botón de lectura para oír la respuesta.');
+      }
     }
     if (activeSignal?.aborted || generation !== authRevision || outputRevision !== replyRevision || intent && internetGeneration !== webRevision) return '';
     if (intent?.mode === 'diagnose') {
-      reply.reply = `Prueba HTTPS a example.com completada.\nDNS: ${reply.dns_ms} ms\nSolicitud HTTPS: ${reply.https_ms} ms\nMedido: ${new Date(reply.checked_at).toLocaleString('es-CL')}\nEs una prueba de ese destino, no una medición ICMP ni de todo Internet.`;
-      text('#network-probe-result', `DNS ${reply.dns_ms} ms / HTTPS ${reply.https_ms} ms`);
+      const diagnosis = describeDiagnosis(reply);
+      reply.reply = diagnosis.reply;
+      text('#network-probe-result', diagnosis.summary);
+    }
+    if (reply.topic_for === 'resume' || (reply.topic_for === 'research' && $('#internet-consent').checked)) {
+      pendingTopic = { kind: reply.topic_for, expires: performance.now() + 30000 };
+    } else if (reply.topic_for === 'research') {
+      reply.reply = 'Activa la autorización de Internet y vuelve a decir «Investiga sobre…».';
     }
     const shouldSpeak = operatorTools.accept(reply, { announce: false });
     if (intent) {
@@ -625,11 +699,33 @@ async function askModel(prompt, signal, intent = operatorIntent(prompt) || netwo
     requestController.abort();
     if (!wasAborted && generation === authRevision && outputRevision === replyRevision) { consoleReply(serviceError(error)); if (intent) text('#web-result', serviceError(error)); }
     throw error;
-  } finally { if (chatAbort === requestController) chatAbort = null; if (webController === controller) webController = null; chatBusy = false; updateNetwork(); renderDesktop(); }
+  } finally { activeDraft = ''; activeResearch = null; if (chatAbort === requestController) chatAbort = null; if (webController === controller) webController = null; chatBusy = false; updateNetwork(); renderDesktop(); }
+}
+
+function pauseActiveResponse() {
+  if (playback.state === 'paused') return Promise.resolve();
+  const draft = activeDraft, research = activeResearch;
+  // Una respuesta completa ya sintetizada puede seguir en el mismo punto.
+  if (!chatBusy && playback.pause()) {
+    conversation.stop();
+    return Promise.resolve();
+  }
+  const cancelled = cancelActiveResponse();
+  pausedDraft = draft; pausedResearch = research;
+  if (research) setSpeechMessage('Investigación en pausa / di «sigue» para retomarla');
+  else if (draft) setSpeechMessage('Respuesta en pausa / di «sigue» para continuar');
+  else setSpeechMessage('Respuesta detenida');
+  return cancelled;
 }
 
 function cancelActiveResponse() {
-  stopConversation(); stopSpeech(); chatAbort?.abort(); autoVoiceRevision++; replyRevision++;
+  stopConversation();
+  return abortReply();
+}
+/** Corta la respuesta en curso (voz, generación y tarea del servidor) sin apagar la conversación. */
+function abortReply() {
+  pendingTopic = null; pausedDraft = activeDraft = ''; pausedResearch = activeResearch = null;
+  stopSpeech(); chatAbort?.abort(); autoVoiceRevision++; replyRevision++;
   if (!token || cancelPending) return cancelPending || Promise.resolve();
   const task = api('conversation/cancel', { method: 'POST', body: {}, timeout: 5000 });
   cancelPending = task;
@@ -663,7 +759,7 @@ function renderVoice() {
   $('#voice-auto').disabled = !permitted;
   $('#speaker-test-button').disabled = busy || microphoneState !== 'idle' || conversation.enabled;
   for (const id of ['#voice-resume-button', '#resume-reply-button']) {
-    $(id).hidden = playback.state !== 'blocked';
+    $(id).hidden = !['blocked', 'paused'].includes(playback.state);
     $(id).disabled = !permitted || microphoneState !== 'idle';
   }
   $('#voice-test-button').disabled = !enabled;
@@ -674,51 +770,101 @@ function renderVoice() {
 }
 function setSpeechMessage(message) { speechMessage = message; text('#voice-result', message); text('#reply-voice-result', message); }
 function stopSpeech() {
-  speechRevision++;
+  speechRevision++; pausedSpeechRest = '';
   speechAbort?.abort(); speechAbort = null;
   speechAutomatic = false;
   playback.stop();
   renderVoice();
 }
-async function speakText(value, { automatic = false } = {}) {
-  if (!token || !online || paused || !capabilities?.voice.can_request || (capabilities.voice.cloud && !$('#voice-consent').checked) || microphoneState !== 'idle') return;
-  if (automatic && (document.hidden || !$('#voice-auto').checked || speechAbort || playback.active)) return;
-  if (playback.volume === 0) { setSpeechMessage('Voz silenciada / volumen 0 %'); return; }
-  if (!value.trim() || value.length > capabilities.voice.max_characters) { setSpeechMessage('El texto supera el límite de voz / máximo 2000 caracteres'); return; }
+/** Una petición de síntesis; la cola decide cuándo suena. */
+async function fetchSpeech(value, signal, voice) {
+  const credential = await currentCredential();
+  if (signal.aborted) return null;
+  const response = await fetch('/api/v1/voice/speech/', {
+    method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: value, cloud_consent: Boolean(voice.cloud && $('#voice-consent').checked) }), cache: 'no-store', credentials: 'omit',
+    signal: AbortSignal.any([signal, AbortSignal.timeout(55000)]),
+  });
+  if (!response.ok) throw new Error((await response.json()).error || 'voice_provider_unavailable');
+  if (!response.headers.get('content-type')?.startsWith(voice.cloud ? 'audio/mpeg' : 'audio/wav')) throw new Error('voice_invalid_audio');
+  timings.synthesis = Number(response.headers.get('X-Thorn-Synthesis-Ms') ?? NaN);
+  const blob = await response.blob();
+  if (!blob.size || blob.size > (voice.cloud ? 2 : 8) * 1024 * 1024) throw new Error('voice_invalid_audio');
+  return blob;
+}
+
+function canSpeak({ automatic = false, resume = false } = {}) {
+  if (!token || !online || paused || !capabilities?.voice.can_request || (capabilities.voice.cloud && !$('#voice-consent').checked) || microphoneState !== 'idle') return false;
+  if (automatic && (document.hidden || (!resume && !$('#voice-auto').checked) || speechAbort || playback.active)) return false;
+  if (playback.volume === 0) { setSpeechMessage('Voz silenciada / volumen 0 %'); return false; }
+  return true;
+}
+
+/**
+ * Abre una salida de voz por frases. Devuelve { push, finish } o null si no se permite hablar.
+ * Si la salida queda en pausa o bloqueada, lo que faltaba se guarda para «sigue».
+ */
+function startSpeech({ automatic = false, resume = false, signal } = {}) {
+  if (!canSpeak({ automatic, resume })) return null;
   if (!automatic) { stopConversation(); autoVoiceRevision++; }
   stopSpeech();
   speechAutomatic = automatic;
   const generation = speechRevision, session = authRevision, voice = capabilities.voice;
   const controller = new AbortController(); speechAbort = controller;
+  const current = () => generation === speechRevision && session === authRevision;
   setSpeechMessage(voice.cloud ? 'Sintetizando con ElevenLabs…' : 'Sintetizando en tu equipo…'); renderVoice();
-  try {
-    const credential = await currentCredential();
-    if (controller.signal.aborted || session !== authRevision) return;
-    const response = await fetch('/api/v1/voice/speech/', {
-      method: 'POST', headers: { Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: value, cloud_consent: Boolean(voice.cloud && $('#voice-consent').checked) }), cache: 'no-store', credentials: 'omit',
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(55000)]),
-    });
-    if (!response.ok) throw new Error((await response.json()).error || 'voice_provider_unavailable');
-    if (!response.headers.get('content-type')?.startsWith(voice.cloud ? 'audio/mpeg' : 'audio/wav')) throw new Error('voice_invalid_audio');
-    timings.synthesis = Number(response.headers.get('X-Thorn-Synthesis-Ms') ?? NaN);
-    const blob = await response.blob();
-    if (generation !== speechRevision || session !== authRevision) return;
-    if (!blob.size || blob.size > (voice.cloud ? 2 : 8) * 1024 * 1024) throw new Error('voice_invalid_audio');
-    speechAbort = null;
-    await playback.start(blob);
-    return playback.state;
-  } catch (error) {
-    if (generation !== speechRevision || session !== authRevision) return;
-    stopSpeech();
-    setSpeechMessage(({ voice_auth_failed: 'API key sin permiso de síntesis. Revisa el .env privado.', voice_not_found: 'La voz configurada no está disponible en tu cuenta.', voice_rate_limited: 'ElevenLabs ha limitado la solicitud. Revisa los créditos de tu cuenta.', voice_busy: 'Hay una síntesis en curso. Espera antes de repetir.', voice_invalid_audio: 'El proveedor no entregó audio válido.' })[error.message] || 'No se pudo completar la síntesis. No se reintenta automáticamente.');
-    return 'error';
-  }
+  const queue = new SpeechQueue({
+    signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
+    synthesize: (value, abort) => fetchSpeech(value, abort, voice),
+    play: async blob => {
+      if (!current()) return 'stopped';
+      await playback.start(blob);
+      return playback.state === 'blocked' || !playback.active ? playback.state : playback.finished;
+    },
+  });
+  return {
+    cloud: Boolean(voice.cloud),
+    push: value => { if (current()) queue.push(value); },
+    async finish() {
+      try {
+        const state = await queue.finished();
+        if (!current()) return undefined;
+        if (['paused', 'blocked'].includes(state)) pausedSpeechRest = queue.remaining().join(' ');
+        if (speechAbort === controller) { speechAbort = null; renderVoice(); }
+        return state;
+      } catch (error) {
+        if (!current()) return undefined;
+        stopSpeech();
+        setSpeechMessage(({ voice_auth_failed: 'API key sin permiso de síntesis. Revisa el .env privado.', voice_not_found: 'La voz configurada no está disponible en tu cuenta.', voice_rate_limited: 'ElevenLabs ha limitado la solicitud. Revisa los créditos de tu cuenta.', voice_busy: 'Hay una síntesis en curso. Espera antes de repetir.', voice_invalid_audio: 'El proveedor no entregó audio válido.' })[error.message] || 'No se pudo completar la síntesis. No se reintenta automáticamente.');
+        return 'error';
+      }
+    },
+  };
+}
+
+async function speakText(value, { automatic = false, resume = false } = {}) {
+  if (!canSpeak({ automatic, resume })) return;
+  if (!value.trim() || value.length > capabilities.voice.max_characters) { setSpeechMessage('El texto supera el límite de voz / máximo 2000 caracteres'); return; }
+  const speech = startSpeech({ automatic, resume });
+  if (!speech) return;
+  // ElevenLabs cobra por solicitud: un solo clip. Piper local: frase a frase, la primera suena antes.
+  for (const part of speech.cloud ? [value] : splitSpeech(value)) speech.push(part);
+  return speech.finish();
+}
+
+/** Reanuda el clip en pausa o bloqueado y después lee las frases que faltaban. */
+async function resumeSpeech() {
+  const rest = pausedSpeechRest;
+  await playback.resume();
+  if (playback.state !== 'playing') return playback.state;
+  pausedSpeechRest = '';
+  const state = await playback.finished;
+  return state === 'ended' && rest ? speakText(rest, { automatic: true, resume: true }) : state;
 }
 $('#voice-form').addEventListener('submit', event => { event.preventDefault(); speakText($('#voice-text').value); });
 $('#speak-reply-button').addEventListener('click', () => speakText($('#console-text').textContent));
 for (const id of ['#voice-stop-button', '#stop-reply-button']) $(id).addEventListener('click', () => { stopConversation(); autoVoiceRevision++; stopSpeech(); setSpeechMessage('Detenido'); });
-for (const id of ['#voice-resume-button', '#resume-reply-button']) $(id).addEventListener('click', () => { if (token && online && !paused && (!capabilities?.voice.cloud || $('#voice-consent').checked)) void playback.resume(); });
+for (const id of ['#voice-resume-button', '#resume-reply-button']) $(id).addEventListener('click', () => { if (token && online && !paused && (!capabilities?.voice.cloud || $('#voice-consent').checked)) void resumeSpeech(); });
 $('#voice-consent').addEventListener('change', () => { autoVoiceRevision++; if (!$('#voice-consent').checked) { stopConversation(); $('#voice-auto').checked = false; stopSpeech(); setSpeechMessage('Autorización de voz retirada'); } renderVoice(); });
 $('#voice-auto').addEventListener('change', () => { autoVoiceRevision++; if (!$('#voice-auto').checked && speechAutomatic) { stopSpeech(); setSpeechMessage('Lectura automática detenida'); } renderVoice(); });
 $('#voice-volume').addEventListener('input', event => { const value = Number(event.target.value); playback.setVolume(value / 100); text('#voice-volume-value', `${value} %`); if (!value) setSpeechMessage('Voz silenciada / volumen 0 %'); else if (speechMessage === 'Voz silenciada / volumen 0 %') setSpeechMessage(''); renderVoice(); });
@@ -929,14 +1075,16 @@ $('#console-toggle').addEventListener('click', () => { $('#console-output').hidd
 $('#close-console').addEventListener('click', () => { $('#console-output').hidden = true; $('#console-toggle').setAttribute('aria-expanded', 'false'); });
 $('#command-form').addEventListener('submit', async event => {
   event.preventDefault();
-  stopConversation();
   const prompt = $('#command-input').value.trim();
+  if (localControl(prompt) === 'continue') conversation.stop();
+  else if (localControl(prompt) !== 'stop') stopConversation();
   const command = prompt.toLowerCase();
   $('#command-input').value = '';
   if (!command) return;
   try {
     const immediate = localControl(prompt);
-    if (immediate) {
+    if (immediate === 'stop') { await pauseActiveResponse(); return; }
+    if (immediate === 'clear') {
       await cancelActiveResponse();
       if (immediate === 'clear' && token) {
         await api('conversation/reset', { method: 'POST', body: {} });
@@ -974,7 +1122,7 @@ $('#diagnostic-button').addEventListener('click', async () => {
       data.language.state === 'model_missing' && 'Comprueba el perfil instalado en Ollama.',
       conversation.state === 'device_lost' && 'Selecciona un micrófono disponible y reactiva Conversación.',
       data.voice.state === 'voice_model_missing' && 'Comprueba el modelo de voz local.'].filter(Boolean);
-    consoleReply(`Ollama: ${data.language.state}\nMicrófono: ${data.microphone.state} · ${conversation.state}\nVoz: ${data.voice.state}\nTranscripción: ${ms('transcription')}\nGeneración: ${ms('generation')}\nSíntesis: ${ms('synthesis')}${advice.length ? '\n\n' + advice.join('\n') : ''}`);
+    consoleReply(`Ollama: ${data.language.state}\nMicrófono: ${data.microphone.state} · ${conversation.state}\nVoz: ${data.voice.state}\nTranscripción: ${ms('transcription')}\nGeneración: ${ms('generation')}\nSíntesis: ${ms('synthesis')}\nFin de captura a inicio de audio: ${ms('voiceResponse')}${advice.length ? '\n\n' + advice.join('\n') : ''}`);
     await poll();
   } catch { toast('No se pudo publicar el diagnóstico'); }
   finally { $('#diagnostic-button').disabled = false; }
@@ -1000,6 +1148,6 @@ function tick() {
   if (telemetry) { text('#sample-state', paused ? 'MUESTRA RETENIDA' : fresh() ? 'MUESTRA VIGENTE' : 'MUESTRA NO VIGENTE'); $('#sample-dot').classList.toggle('fresh', fresh()); $('.telemetry-column').classList.toggle('stale', !fresh()); }
 }
 window.addEventListener('resize', drawCharts);
-document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (document.hidden) { cancelWeb(); stopConversation(); autoVoiceRevision++; if (speechAutomatic) stopSpeech(); cancelMicrophone(); renderMicrophone(); renderVoice(); } else if (!paused) poll(); });
+document.addEventListener('visibilitychange', () => { clearTimeout(timer); if (document.hidden) { pendingTopic = null; pausedDraft = activeDraft = ''; pausedResearch = activeResearch = null; cancelWeb(); stopConversation(); autoVoiceRevision++; if (speechAutomatic) stopSpeech(); cancelMicrophone(); renderMicrophone(); renderVoice(); } else if (!paused) poll(); });
 window.addEventListener('pagehide', () => { sessions.close(); cancelWeb(); stopConversation(); token = ''; cancelMicrophone(); stopSpeech(); scene.dispose(); clearTimeout(timer); });
 tick(); setInterval(tick, 1000); renderTelemetry(); poll();

@@ -13,6 +13,7 @@ from typing import Any, Callable
 from .audit import AuditStore
 from .native_worker import run_native
 from .paths import data_root
+from .speech_text import for_speech
 
 MODEL_NAME = "es_MX-ald-medium"
 MODEL_DIR = data_root() / ".models" / "piper-es_MX-ald-medium"
@@ -124,7 +125,9 @@ class LocalVoice:
                 raise RuntimeError("voice_" + ("closed" if self.closed else self.state))
             await self.record("started", request_id, len(text))
             try:
-                audio = await run_native(self.synthesizer, self.model, text.strip())
+                # Se pronuncia sin marcado, citas ni URL; el HUD sigue mostrando el original.
+                spoken = for_speech(text) or text.strip()
+                audio = await run_native(self.synthesizer, self.model, spoken)
                 if not isinstance(audio, bytes) or not 46 <= len(audio) <= MAX_AUDIO or not audio.startswith(b"RIFF"):
                     raise ValueError("invalid_audio")
             except asyncio.CancelledError:

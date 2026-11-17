@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import Mock, patch
 import zipfile
 
-from core.speech_input import LocalSpeechInput, MAX_PCM_BYTES
+from core.speech_input import LocalSpeechInput, MAX_PCM_BYTES, SAMPLE_RATE, WAKE_GRAMMAR, wake_end
 from tests.test_assistant import MemoryAudit
 from tools.install_speech_model import NAME, validate_archive
 
@@ -78,6 +78,49 @@ class SpeechTests(unittest.IsolatedAsyncioTestCase):
         result = await engine.transcribe(b"\0" * 6400, local_consent=True, request_id="test")
         self.assertEqual(result["text"], "")
         self.assertFalse(result["has_speech"])
+
+    async def test_wake_mode_only_transcribes_after_the_name(self) -> None:
+        seen: list[int] = []
+        ends = iter([0.6, None])
+        engine = LocalSpeechInput(MemoryAudit(), enabled=True, model_path=Path("dictado"),
+                                  loader=lambda path: object(), grammar_check=lambda path: True,
+                                  wake_model_path=Path("pequeno"), wake_detector=lambda model, pcm: next(ends),
+                                  decoder=lambda model, pcm: seen.append(len(pcm)) or "abre el sistema")
+        await engine.start()
+        self.addAsyncCleanup(engine.stop)
+        self.assertEqual(engine.status["wake_detection"], "grammar")
+        pcm = b"\1\0" * SAMPLE_RATE * 2
+        result = await engine.transcribe(pcm, local_consent=True, request_id="a", mode="wake")
+        self.assertEqual((result["wake"], result["text"]), (True, "abre el sistema"))
+        self.assertEqual(seen, [len(pcm) - int(0.6 * SAMPLE_RATE) * 2], "el nombre se recorta del audio")
+        ambient = await engine.transcribe(pcm, local_consent=True, request_id="b", mode="wake")
+        self.assertEqual((ambient["wake"], ambient["text"]), (False, ""))
+        self.assertEqual(len(seen), 1, "sin nombre no se transcribe la charla ambiental")
+        dictation = await engine.transcribe(pcm, local_consent=True, request_id="c")
+        self.assertIsNone(dictation["wake"])
+        with self.assertRaisesRegex(ValueError, "^microphone_invalid_mode$"):
+            await engine.transcribe(pcm, local_consent=True, request_id="d", mode="otro")
+
+    async def test_wake_mode_without_grammar_model_falls_back_to_aliases(self) -> None:
+        engine = LocalSpeechInput(MemoryAudit(), enabled=True, model_path=Path("grande"), loader=lambda path: object(),
+                                  grammar_check=lambda path: False, decoder=lambda model, pcm: "Thorn abre el sistema")
+        await engine.start()
+        self.addAsyncCleanup(engine.stop)
+        self.assertEqual(engine.status["wake_detection"], "aliases")
+        result = await engine.transcribe(b"\0" * 6400, local_consent=True, request_id="a", mode="wake")
+        self.assertEqual((result["wake"], result["text"]), (None, "Thorn abre el sistema"))
+
+    def test_wake_end_requires_the_name_at_the_start(self) -> None:
+        word = lambda text, start, end, conf=1.0: {"word": text, "start": start, "end": end, "conf": conf}
+        self.assertEqual(wake_end([word("thorn", 0.24, 0.7), word("abre", 0.8, 1.2)]), 0.7)
+        self.assertEqual(wake_end([word("[unk]", 0.1, 0.2), word("oye", 0.24, 0.57), word("thorn", 0.6, 1.0)]), 1.0)
+        for words in ([word("toma", 0.2, 0.5), word("thorn", 0.6, 1.0)], [word("thorn", 2.5, 3.0)],
+                      [word("thorn", 0.2, 0.6, conf=0.3)], [word("oye", 0.2, 0.5), word("torre", 0.5, 0.9)], []):
+            self.assertIsNone(wake_end(words))
+        phrases = json.loads(WAKE_GRAMMAR)
+        self.assertIn("oye thorn", phrases)
+        self.assertEqual(phrases[-1], "[unk]")
+        self.assertTrue({"toma", "torre", "por", "son", "don"} <= set(phrases), "distractores medidos")
 
     async def test_bad_native_results_are_redacted(self) -> None:
         for decode in (lambda model, pcm: "x" * 2001, Mock(side_effect=RuntimeError("private detail"))):

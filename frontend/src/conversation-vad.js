@@ -44,7 +44,8 @@ export class ConversationCapture {
           baseAssetPath: '/hud/assets/', onnxWASMBasePath: '/hud/assets/',
           ortConfig: ort => { ort.env.logLevel = 'error'; ort.env.wasm.numThreads = 1; ort.env.wasm.proxy = true; },
           positiveSpeechThreshold: 0.6, negativeSpeechThreshold: 0.4,
-          redemptionMs: 650, preSpeechPadMs: 300, minSpeechMs: 250, submitUserSpeechOnPause: true,
+          // Conserva el inicio y tolera pausas al hablar en frases cortas.
+          redemptionMs: 1050, preSpeechPadMs: 480, minSpeechMs: 160, submitUserSpeechOnPause: true,
           getStream: () => this.getStream(), resumeStream: () => this.getStream(),
           pauseStream: async stream => { stream.getTracks().forEach(track => track.stop()); this.stream = null; },
           onFrameProcessed: (_, frame) => {
@@ -90,6 +91,15 @@ export class ConversationCapture {
       }
     } catch (error) { this.stop(); throw error; }
     finally { this.starting = false; if (this.closed) this.disposeVad(); }
+  }
+  /**
+   * Al terminar una frase la captura deja de aceptar audio hasta que alguien la rearme.
+   * En una respuesta con interrupción, la escucha debe seguir: lo oído pudo ser eco o ruido.
+   */
+  rearm() {
+    if (this.closed || this.pausing || this.starting || !this.vad || !this.stream) return false;
+    this.accepting = true;
+    return true;
   }
   async pause() {
     if (this.pausePromise) return this.pausePromise;
