@@ -20,7 +20,7 @@ from django.urls import get_resolver
 
 from core.events import EventType, ThornEvent
 from core.runtime import RuntimeState, ThornRuntime
-from core.system_sensor import SystemSensor, SystemSnapshot
+from core.system.system_sensor import SystemSensor, SystemSnapshot
 from thorn_web.lifespan import ASGIMessage, ASGIScope, ThornASGI
 
 DJANGO_APP = get_asgi_application()

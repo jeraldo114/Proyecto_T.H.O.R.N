@@ -1,6 +1,6 @@
 # Notas para entender T.H.O.R.N
 
-T.H.O.R.N es el asistente. Bastion 8 es el nombre de su version de actualizacion.
+T.H.O.R.N es el asistente. Bastion 9 es el nombre de su version de actualizacion actual.
 El backend se ejecuta localmente en Python; Django agrega una puerta HTTP para
 conectar el HUD con ese backend. La ventana Windows reutiliza el HUD mediante WebView2.
 
@@ -18,12 +18,12 @@ explican decisiones concretas con el tono de T.H.O.R.N: directo y tactico.
 | `core/events.py` | Define el formato de un mensaje: que paso, origen, datos, prioridad e identificador. |
 | `core/event_bus.py` | Guarda mensajes en una cola y los entrega a las funciones suscritas. |
 | `core/runtime.py` | Arranca el pool y los consumidores; los cierra en el orden correcto. |
-| `core/system_sensor.py` | Lee indicadores del equipo en un hilo y conserva la ultima muestra. |
-| `core/db_core.py` | Presta conexiones MySQL y asegura su devolucion al pool. |
-| `core/alerts.py` | Distingue picos breves, presion sostenida y recuperacion. |
-| `core/audit.py` | Guarda historial, notas voluntarias y reglas en tablas propias. |
-| `core/actions.py` | Abre solo destinos conocidos, despues de confirmar y registrar la intencion. |
-| `core/local_llm.py` | Habla con Ollama local; no ejecuta lo que responda un modelo. |
+| `core/system/system_sensor.py` | Lee indicadores del equipo en un hilo y conserva la ultima muestra. |
+| `core/memory/db_core.py` | Presta conexiones MySQL y asegura su devolucion al pool. |
+| `core/system/alerts.py` | Distingue picos breves, presion sostenida y recuperacion. |
+| `core/memory/audit.py` | Guarda historial, notas voluntarias y reglas en tablas propias. |
+| `core/system/actions.py` | Abre solo destinos conocidos, despues de confirmar y registrar la intencion. |
+| `core/brain/local_llm.py` | Habla con Ollama local; no ejecuta lo que responda un modelo. |
 | `core/services.py` | Arranca y cierra los nuevos servicios junto al nucleo. |
 | `desktop.py` | Ventana, bandeja y servidor propio; no habilita inicio automatico por defecto. |
 | `core/logging_config.py` | Envia los logs a un hilo que escribe en consola. |
@@ -144,8 +144,8 @@ esta integrado, pero necesita motor/modelo instalados; no se inventan respuestas
 si faltan. La voz ElevenLabs esta integrada como salida opcional en la nube,
 sin microfono. Requiere credenciales privadas, voz autorizada y consentimiento
 de envio del texto; no se ha creado ninguna voz en la cuenta sin API key.
-`core/personality.py` define como habla T.H.O.R.N sin cambiar sus permisos.
-`core/elevenlabs_voice.py` usa HTTP asincrono y audio limitado en RAM; la herramienta
+`core/brain/personality.py` define como habla T.H.O.R.N sin cambiar sus permisos.
+`core/voice/elevenlabs_voice.py` usa HTTP asincrono y audio limitado en RAM; la herramienta
 `tools/elevenlabs_voice.py` prepara una voz original, no copias del doblaje.
 Ver [Voz ElevenLabs](VOZ_ELEVENLABS.md) para pasos, privacidad y consumo.
 

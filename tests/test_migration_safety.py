@@ -8,7 +8,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock, patch
 
-from core.secure_storage import StorageCipher, StorageUnavailable
+from core.security.secure_storage import StorageCipher, StorageUnavailable
 from tools.migrate_secure_storage import decode_record, require_offline, restore_database
 
 
@@ -43,21 +43,21 @@ class MigrationSafetyTests(unittest.TestCase):
 
 class RestoreDatabaseSafetyTests(unittest.IsolatedAsyncioTestCase):
     async def test_existing_database_is_never_dropped(self) -> None:
-        from core.secure_storage import Vault, canonical
+        from core.security.secure_storage import Vault, canonical
         import json
         payload = {'vault': json.loads(Vault(StorageCipher(os.urandom(32)), {}).serialize())}
         cur = Mock(execute=AsyncMock(side_effect=RuntimeError('database_exists')))
         conn = Mock()
         @asynccontextmanager
         async def session(): yield conn, cur
-        with patch('core.db_core.db_session', session):
+        with patch('core.memory.db_core.db_session', session):
             with self.assertRaisesRegex(RuntimeError, 'database_exists'):
                 await restore_database(payload, 'db_thorn_restore_' + 'a' * 16, temporary=True)
         self.assertEqual(cur.execute.await_count, 1)
         self.assertTrue(cur.execute.call_args.args[0].startswith('CREATE DATABASE'))
 
     async def test_live_or_arbitrary_database_name_is_rejected_before_sql(self) -> None:
-        with patch('core.db_core.db_session') as session:
+        with patch('core.memory.db_core.db_session') as session:
             for name in ('db_thorn', 'mysql', 'db_thorn_restore_abc;DROP DATABASE db_thorn'):
                 with self.assertRaisesRegex(ValueError, 'invalid_restore_database'):
                     await restore_database({}, name, temporary=True)

@@ -9,6 +9,7 @@
     "test:e2e": "node tests/e2e.mjs",
     "test:microphone": "node tests/microphone-e2e.mjs",
     "test:conversation": "node tests/conversation-e2e.mjs",
+    "test:bargein": "node tests/barge-in-e2e.mjs",
     "test:network": "node tests/network-e2e.mjs",
     "test:local": "node tests/local-e2e.mjs",
     "test:bastion9": "node tests/bastion9-e2e.mjs",

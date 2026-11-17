@@ -1,11 +1,14 @@
-# Voz de T.H.O.R.N / Bastion 8
+# Voz en la nube con ElevenLabs (opcional)
+
+La voz predeterminada es Piper, local y sin cuentas. Esta guia solo aplica si
+desactivas `THORN_LOCAL_AI_ONLY` y eliges `THORN_VOICE_PROVIDER=elevenlabs`.
 
 ## Que esta preparado
 
 T.H.O.R.N conserva su identidad. Su personalidad toma rasgos generales de un
 asistente tactico: sereno, preciso, elegante y con humor seco ocasional. No
 afirma ser J.A.R.V.I.S ni imita la identidad vocal de un actor. El prompt completo
-esta en `core/personality.py`, junto con el perfil vocal original y texto de prueba.
+esta en `core/brain/personality.py`, junto con el perfil vocal original y texto de prueba.
 El modelo Ollama debe estar instalado para producir respuestas con ese estilo;
 ElevenLabs solo lee texto, no cambia la personalidad ni ejecuta comandos.
 

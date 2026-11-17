@@ -10,9 +10,10 @@ import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.local_llm import validate_endpoint
-from core.personality import PERSONALITY
-from core.brain_host import LocalBrainHost
+from core.brain.local_llm import CONTEXT_TOKENS, REPLY_TOKENS
+from core.loopback import validate_endpoint
+from core.brain.personality import PERSONALITY
+from core.brain.brain_host import LocalBrainHost
 from core.version import MODEL_PROFILE
 
 
@@ -24,7 +25,7 @@ async def create_profile() -> None:
             raise SystemExit("Falta qwen2.5:1.5b local. No se descarga ni se usa un proveedor remoto automaticamente.")
         response = await client.post("/api/create", json={"model": MODEL_PROFILE, "from": "qwen2.5:1.5b",
             "system": PERSONALITY + " Tu motor base es Qwen2.5 1.5B local, no entrenamiento nuevo.",
-            "parameters": {"num_ctx": 2048, "num_predict": 384, "temperature": 0.2}, "stream": False})
+            "parameters": {"num_ctx": CONTEXT_TOKENS, "num_predict": REPLY_TOKENS, "temperature": 0.2}, "stream": False})
         response.raise_for_status()
         if response.json().get("status") != "success":
             raise SystemExit("Ollama no confirmo la creacion del perfil.")

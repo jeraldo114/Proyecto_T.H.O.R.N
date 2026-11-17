@@ -13,8 +13,8 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 from core.services import AssistantServices
-from core.documents import question_excerpts
-from core.sessions import ALL_SCOPES
+from core.documents.service import question_excerpts
+from core.security.sessions import ALL_SCOPES
 from .assistant import body, private
 from .sessions import credential
 from .views import _runtime

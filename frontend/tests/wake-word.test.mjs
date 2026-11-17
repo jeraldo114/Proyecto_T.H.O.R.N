@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { WakeWordGate } from '../src/wake-word.js';
-import { ConversationLoop } from '../src/conversation.js';
+import { WakeWordGate } from '../src/voice/wake-word.js';
+import { ConversationLoop } from '../src/voice/conversation.js';
 
 test('el nombre exige una palabra inicial completa y permite dictado latino', () => {
   let now = 0;

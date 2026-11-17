@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { preserveTensorInputs } from '../src/vad-ort-session.js';
+import { preserveTensorInputs } from '../src/voice/vad-ort-session.js';
 
 test('el worker puede transferir cada entrada sin invalidar tensores reutilizados', async () => {
   class Tensor { constructor(type, data, dims) { Object.assign(this, { type, data, dims }); } }

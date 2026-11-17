@@ -9,22 +9,22 @@ from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from .actions import ActionController
-from .alerts import AlertEngine
-from .audit import AuditStore
-from .events import EventType, ThornEvent
-from .elevenlabs_voice import ElevenLabsVoice, VoiceConfig
-from .local_llm import LocalLanguageModel
-from .speech_input import LocalSpeechInput
-from .internet import InternetService
-from .network_sensor import NetworkSensor
-from .local_voice import LocalVoice
-from .operator import OperatorServices
-from .version import MODEL_PROFILE
-from .conversation_memory import ConversationMemory
+from core.system.actions import ActionController
+from core.system.alerts import AlertEngine
+from core.memory.audit import AuditStore
+from core.events import EventType, ThornEvent
+from core.voice.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
+from core.brain.local_llm import LocalLanguageModel
+from core.voice.speech_input import LocalSpeechInput
+from core.network.internet import InternetService
+from core.network.network_sensor import NetworkSensor
+from core.voice.local_voice import LocalVoice
+from core.brain.operator import OperatorServices
+from core.version import MODEL_PROFILE
+from core.memory.conversation_memory import ConversationMemory
 
 if TYPE_CHECKING:
-    from .runtime import ThornRuntime
+    from core.runtime import ThornRuntime
 
 
 class AssistantServices:
@@ -53,7 +53,8 @@ class AssistantServices:
             self.voice.state = "policy_blocked" if provider == "elevenlabs" else "invalid_configuration"
         self.microphone = LocalSpeechInput(self.audit)
         self.conversation_auto_start = os.getenv("THORN_CONVERSATION_AUTO_START", "0") == "1"
-        self.internet = InternetService(self.audit, runtime.bus)
+        # La red local avisa antes de esperar a que el DNS falle por tiempo.
+        self.internet = InternetService(self.audit, runtime.bus, offline=lambda: self.network.offline())
         self.network = NetworkSensor(runtime.bus)
         self.operator = OperatorServices(self)
         runtime.sessions.on_release(self.operator.store.release)
@@ -111,7 +112,8 @@ class AssistantServices:
                     # orden. Su resumen recibe extractos y carece de acciones OS.
                     answer = await self.language.ask(question, query_id=result["request_id"], context={
                         "web_sources_untrusted": [{"number": index, "title": source["title"][:100],
-                            "excerpt": source["excerpt"][:1500 if len(sources) == 1 else 430]}
+                            "excerpt": source["excerpt"][:1500 if len(sources) == 1 else 430],
+                            "retrieved_at": source.get("retrieved_at"), "published_at_declared": source.get("published_at")}
                             for index, source in enumerate(sources, 1)],
                         "retrieved_at": result["retrieved_at"], "actions_available": False})
                     reply, method = answer["reply"][:1800], "local_llm"

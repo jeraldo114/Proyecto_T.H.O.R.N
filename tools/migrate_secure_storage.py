@@ -17,9 +17,9 @@ sys.path.insert(0, str(ROOT))
 
 from dotenv import dotenv_values, set_key
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from core.secure_storage import SECRET_NAMES, StorageCipher, StorageUnavailable, Vault, canonical, load_vault, save_vault, vault_path
-from core.secure_backup import RecoveryKeys, initialize_recovery, seal_backup, open_backup, MAX_FILE
-from core.secure_files import atomic_private_write, read_private, private_permissions, sealed_read, sealed_write
+from core.security.secure_storage import SECRET_NAMES, StorageCipher, StorageUnavailable, Vault, canonical, load_vault, save_vault, vault_path
+from core.security.secure_backup import RecoveryKeys, initialize_recovery, seal_backup, open_backup, MAX_FILE
+from core.security.secure_files import atomic_private_write, read_private, private_permissions, sealed_read, sealed_write
 from thorn_web.credentials import root_credential, file_lock
 
 
@@ -58,7 +58,7 @@ async def read_rows(cur: object, cipher: StorageCipher | tuple[StorageCipher, ..
 
 
 async def snapshot(root: Path, vault: Vault, old_cipher: StorageCipher | tuple[StorageCipher, ...] | None) -> dict[str, object]:
-    from core.db_core import db_session
+    from core.memory.db_core import db_session
     async with db_session() as (_, cur):
         rows = await read_rows(cur, old_cipher)
     def private_metadata() -> dict[str, object]:
@@ -129,7 +129,7 @@ async def create_backup(root: Path, value: dict[str, object], keys: RecoveryKeys
 
 async def restore_database(value: dict[str, object], database: str, *, temporary: bool) -> None:
     """Crea una base NUEVA. No borra, reemplaza ni importa sobre la base original."""
-    from core.db_core import db_session
+    from core.memory.db_core import db_session
     if not re.fullmatch(r'db_thorn_restore_[a-f0-9]{16}', database):
         raise ValueError('invalid_restore_database')
     cipher = Vault.parse(canonical(value['vault'])).cipher
@@ -148,8 +148,8 @@ async def restore_database(value: dict[str, object], database: str, *, temporary
                 await cur.execute(f'INSERT INTO `{database}`.thorn_audit (id,created_at,kind,status,summary,details) VALUES (%s,%s,%s,%s,%s,%s)',
                     (row['id'], datetime.fromisoformat(row['created_at']), row['kind'], row['status'], row['summary'], sealed))
             if 'conversation' in value['rows']:
-                from core.audit import AuditStore
-                from core.conversation_memory import ConversationMemory
+                from core.memory.audit import AuditStore
+                from core.memory.conversation_memory import ConversationMemory
                 index = ConversationMemory(AuditStore(enabled=True, cipher=cipher))
                 await cur.execute(f'CREATE TABLE `{database}`.thorn_conversation (id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,identity CHAR(32) CHARACTER SET ascii NOT NULL UNIQUE,created_at DATETIME(6) NOT NULL,source VARCHAR(24) NOT NULL,payload MEDIUMTEXT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4')
                 await cur.execute(f'CREATE TABLE `{database}`.thorn_conversation_terms (term CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,turn_id BIGINT UNSIGNED NOT NULL,PRIMARY KEY(term,turn_id),INDEX thorn_term_turn(turn_id),FOREIGN KEY(turn_id) REFERENCES `{database}`.thorn_conversation(id) ON DELETE CASCADE) ENGINE=InnoDB')
@@ -192,7 +192,7 @@ def restore_files(value: dict[str, object], destination: Path, database: str) ->
     save_vault(vault, destination)
     root_credential(destination, value['authority'])
     if value['release_signing']:
-        from core.secure_storage import decode64
+        from core.security.secure_storage import decode64
         sealed_write(destination, 'release-signing.dpapi', decode64(value['release_signing'], 32))
     config = {**value['config'], 'MYSQL_DB': database, 'THORN_SECURE_STORAGE': '1'}
     config.pop('THORN_DATA_DIR', None)
@@ -214,7 +214,7 @@ async def verify_restore(root: Path, value: dict[str, object]) -> None:
 
 
 async def migrate(root: Path, vault: Vault, value: dict[str, object], old_cipher: StorageCipher | tuple[StorageCipher, ...] | None) -> None:
-    from core.db_core import db_session
+    from core.memory.db_core import db_session
     pending = root / 'data/security/migration.pending'
     if not pending.exists():
         await asyncio.to_thread(atomic_private_write, pending, b'Encrypted migration in progress\n', root=root)
@@ -236,8 +236,8 @@ async def migrate(root: Path, vault: Vault, value: dict[str, object], old_cipher
             sealed = await asyncio.to_thread(vault.cipher.encrypt, row['details'], f"audit:{row['id']}")
             await cur.execute('UPDATE thorn_audit SET details=%s WHERE id=%s', (sealed, row['id']))
         if current['conversation']:
-            from core.audit import AuditStore
-            from core.conversation_memory import ConversationMemory
+            from core.memory.audit import AuditStore
+            from core.memory.conversation_memory import ConversationMemory
             index = ConversationMemory(AuditStore(enabled=True, cipher=vault.cipher))
             await cur.execute('DELETE FROM thorn_conversation_terms')
             for row in current['conversation']:
@@ -278,7 +278,7 @@ async def run(args: argparse.Namespace) -> None:
             for name, secret in recovered.secrets.items(): os.environ.setdefault(name, secret)
             os.environ['MYSQL_DB'] = 'mysql'
             os.environ['THORN_SECURE_STORAGE'] = '0'
-            from core.db_core import inicializar_motor_datos, cerrar_motor_datos
+            from core.memory.db_core import inicializar_motor_datos, cerrar_motor_datos
             await inicializar_motor_datos()
             try:
                 if args.verify:
@@ -294,11 +294,11 @@ async def run(args: argparse.Namespace) -> None:
                 await cerrar_motor_datos()
     os.environ['THORN_DATA_DIR'] = str(root)
     from thorn_web.config import prepare_environment
-    from core.db_core import inicializar_motor_datos, cerrar_motor_datos
+    from core.memory.db_core import inicializar_motor_datos, cerrar_motor_datos
     await asyncio.to_thread(prepare_environment, allow_pending=True)
     await inicializar_motor_datos(allow_pending=True)
     try:
-        from core.audit import AuditStore
+        from core.memory.audit import AuditStore
         await AuditStore(enabled=True).initialize()
         key_path = root / 'data/recovery/thorn-recovery.key'
         if args.apply or args.rotate_key or args.backup:

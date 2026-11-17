@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from core.event_bus import EventBus
 from core.events import EventType, ThornEvent
-from core.system_sensor import SystemSensor, SystemSnapshot, read_system_snapshot
+from core.system.system_sensor import SystemSensor, SystemSnapshot, read_system_snapshot
 
 
 def sample() -> SystemSnapshot:
@@ -75,7 +75,7 @@ class SensorTests(unittest.IsolatedAsyncioTestCase):
 
         self.bus.subscribe(EventType.MODULE_ERROR, handler)
         sensor = self.make_sensor(reader=reader, interval=0.2)
-        with self.assertLogs("core.system_sensor", level="WARNING") as logs:
+        with self.assertLogs("core.system.system_sensor", level="WARNING") as logs:
             await sensor.start()
             await eventually(lambda: bool(errors))
         self.assertFalse(sensor.stats["fresh"])
@@ -89,7 +89,7 @@ class SensorTests(unittest.IsolatedAsyncioTestCase):
         sensor = self.make_sensor(reader=reader, interval=0.2)
         await sensor.start()
         await eventually(lambda: sensor.stats["samples"] == 1)
-        with self.assertLogs("core.system_sensor", level="WARNING"):
+        with self.assertLogs("core.system.system_sensor", level="WARNING"):
             await eventually(lambda: sensor.stats["errors"] == 1)
         self.assertEqual(sensor.snapshot, sample())
         self.assertFalse(sensor.stats["fresh"])
@@ -98,7 +98,7 @@ class SensorTests(unittest.IsolatedAsyncioTestCase):
         sensor = self.make_sensor(reader=sample)
         await sensor.start()
         await eventually(lambda: sensor.snapshot is not None)
-        with patch("core.system_sensor.time.monotonic", return_value=sensor._sample_time + 7):
+        with patch("core.system.system_sensor.time.monotonic", return_value=sensor._sample_time + 7):
             self.assertFalse(sensor.stats["fresh"])
 
     async def test_stop_waits_for_active_thread_even_when_caller_cancelled(self) -> None:

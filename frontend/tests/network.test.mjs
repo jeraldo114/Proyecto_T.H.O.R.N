@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { rate, networkIntent, safeSourceUrl } from '../src/network.js';
+import { rate, networkIntent, topicFollowUp, safeSourceUrl } from '../src/network/network.js';
 
 test('tasas conservan ausencia y distinguen bytes por segundo', () => {
   assert.equal(rate(null), '—'); assert.equal(rate(NaN), '—'); assert.equal(rate(-1), '—');
@@ -20,4 +20,26 @@ test('fuentes no pueden introducir JavaScript, credenciales ni destinos privados
     assert.equal(safeSourceUrl(value), null);
   }
   assert.equal(safeSourceUrl('https://example.com/test'), 'https://example.com/test');
+});
+
+test('el tema siguiente usa una sola aclaración vigente y respeta órdenes nuevas', () => {
+  const pending = { kind: 'research', expires: 200 };
+  assert.deepEqual(topicFollowUp(pending, 'Sobre cámaras', 100),
+    { intent: { mode: 'search', value: 'cámaras', investigate: true } });
+  assert.equal(topicFollowUp(pending, '¿Revisa el equipo?', 100), null);
+  assert.equal(topicFollowUp(pending, 'cámaras', 200), null);
+  assert.deepEqual(topicFollowUp({ ...pending, kind: 'resume' }, 'mis cámaras', 100),
+    { prompt: 'Retoma el tema de mis cámaras' });
+});
+
+test('el diagnóstico dice en qué etapa falló y sigue leyendo el formato anterior', async () => {
+  const { describeDiagnosis } = await import('../src/network/network.js');
+  const ok = describeDiagnosis({ checked_at: '2026-11-17T12:00:00Z', reachable: true, dns_ms: 12, https_ms: 80, failed_stage: null,
+    checks: [{ host: 'example.com', reachable: true, dns_ms: 12, https_ms: 80 }, { host: 'es.wikipedia.org', reachable: false, failed_stage: 'tls' }] });
+  assert.equal(ok.summary, 'DNS 12 ms / HTTPS 80 ms');
+  assert.match(ok.reply, /es\.wikipedia\.org, pero su certificado TLS no fue válido/);
+  const offline = describeDiagnosis({ checked_at: '2026-11-17T12:00:00Z', reachable: false, failed_stage: 'offline', checks: [] });
+  assert.equal(offline.summary, 'SIN RED LOCAL');
+  const legacy = describeDiagnosis({ checked_at: '2026-11-17T12:00:00Z', reachable: true, dns_ms: 12.34, https_ms: 56.78 });
+  assert.match(legacy.reply, /example\.com: DNS 12\.34 ms/);
 });

@@ -64,14 +64,14 @@ ni como evidencia de que el modelo esta pensando.
 | Acciones Windows | Catalogo cerrado, confirmacion y auditoria. | Ampliar destinos concretos cuando sean necesarios, conservando ese recorrido. |
 | Camara y gestos | No forman parte del HUD actual. | Modulos opcionales, con permiso, indicador visible y cierre efectivo del dispositivo. |
 
-La diferencia de contexto es concreta: `core/local_llm.py` envia actualmente el
+La diferencia de contexto es concreta: `core/brain/local_llm.py` envia actualmente el
 prompt del sistema y la pregunta de ese turno a Ollama. Conservar el modelo
 cargado mediante `keep_alive` no conserva por si solo una conversacion.
 Las notas persistentes tampoco equivalen a un historial conversacional activo.
 
 ## Orden de implementacion
 
-1. **HUD y estados.** Evolucionar `frontend/src/core-scene.js`, `hud.js` y
+1. **HUD y estados.** Evolucionar `frontend/src/ui/core-scene.js`, `hud.js` y
    `hud.css` para Presencia/Trabajo y un nucleo que represente los estados reales.
    Mantener el reloj local, las mediciones existentes y el movimiento reducido.
 2. **Paneles de resultados.** Empezar con diagnostico, respuestas, notas y fuentes

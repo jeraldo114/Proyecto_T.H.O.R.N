@@ -52,8 +52,9 @@
       <main>
         <div class="conversation-bar" id="conversation-bar" data-state="off">
           <label><input type="checkbox" id="conversation-enabled" role="switch" disabled>Conversación</label>
-          <label><input type="checkbox" id="conversation-barge">Interrumpir con «Thorn, espera» (experimental)</label>
-          <label title="STT local detecta Thorn, Torn o Tor al principio. Sin audio guardado. Seguimiento durante 30 segundos."><input type="checkbox" id="conversation-wake" checked>Activar por «Thorn»</label>
+          <label title="Mientras Thorn habla, baja su voz al oírte. «Espera» o «para» pausan; otra frase la reemplaza. Funciona mejor con audífonos o un micrófono con cancelación de eco."><input type="checkbox" id="conversation-barge">Interrumpir hablando (experimental)</label>
+          <label title="El servidor busca «Thorn» u «Oye Thorn» al principio con una gramática local y solo transcribe lo dicho después. Sin audio guardado. Seguimiento durante 30 segundos."><input type="checkbox" id="conversation-wake" checked>Activar por «Thorn»</label>
+          <span id="conversation-heard" hidden></span>
           <span id="conversation-state" role="status">Micrófono apagado</span>
           <button class="icon-button small" id="conversation-stop" disabled aria-label="Detener conversación" data-tooltip="Detener conversación y cerrar micrófono"><i data-lucide="square"></i></button>
         </div>

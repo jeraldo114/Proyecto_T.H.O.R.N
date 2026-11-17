@@ -13,13 +13,12 @@ import sys
 from uuid import uuid4
 
 import httpx
-from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from core.elevenlabs_voice import API_ORIGIN, MAX_AUDIO, VoiceConfig, valid_voice_id
-from core.personality import VOICE_DESCRIPTION, VOICE_PREVIEW
+from core.voice.elevenlabs_voice import API_ORIGIN, MAX_AUDIO, VoiceConfig, valid_voice_id
+from core.brain.personality import VOICE_DESCRIPTION, VOICE_PREVIEW
 
 
 def provider_error(status: int, data: object) -> str:

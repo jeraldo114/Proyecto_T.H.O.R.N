@@ -34,6 +34,8 @@ def configure_startup(enabled: bool) -> None:
     from core.paths import compiled, data_root
     arguments = [str(executable), '--data-dir', str(data_root()), '--background'] if compiled() else [str(executable), str(Path(__file__).resolve()), '--background']
     command = subprocess.list2cmdline(arguments)
+    # NOTA DEL OPERADOR: «THORN Bastion 8» es el nombre ya registrado en Windows.
+    # Renombrarlo dejaria huerfana la entrada de arranque de quien ya la activo.
     with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run") as key:
         if enabled:
             winreg.SetValueEx(key, "THORN Bastion 8", 0, winreg.REG_SZ, command)
@@ -241,7 +243,7 @@ def run_desktop(*, without_database: bool, smoke_test: bool, background: bool) -
 
 def main() -> int:
     if sys.argv[1:] == ["--document-worker"]:
-        from core.document_worker import main as document_main
+        from core.documents.worker import main as document_main
         return document_main()
     parser = argparse.ArgumentParser(description=f"T.H.O.R.N {RELEASE} - escritorio Windows")
     parser.add_argument("--sin-db", action="store_true")

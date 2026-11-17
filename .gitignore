@@ -57,6 +57,7 @@ backup*.sql
 *.lnk
 
 # Archivos personales de Windows y editores.
+.claude/
 Thumbs.db
 Desktop.ini
 .DS_Store

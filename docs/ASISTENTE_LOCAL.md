@@ -1,4 +1,4 @@
-# Asistente local - Bastion 8
+# Asistente local
 
 ## Estado real
 
@@ -22,13 +22,13 @@ TTS en nube ni ejecucion Windows. Ver [Voz ElevenLabs](VOZ_ELEVENLABS.md) y
 
 | Archivo | Funcion |
 | --- | --- |
-| core/alerts.py | Detecta presion sostenida y su recuperacion, sin avisos repetidos. |
-| core/audit.py | Escribe historial, reglas y notas en MySQL con parametros SQL. |
-| core/actions.py | Prepara acciones conocidas y exige una confirmacion de un solo uso. |
-| core/local_llm.py | Consulta Ollama de forma async y valida su respuesta JSON. |
-| core/personality.py | Define tono propio, verdad, permisos y perfil vocal original. |
-| core/elevenlabs_voice.py | Sintetiza texto con HTTP async; mantiene audio acotado en RAM. |
-| core/speech_input.py | Transcribe dictado local en workers, sin grabaciones persistentes. |
+| core/system/alerts.py | Detecta presion sostenida y su recuperacion, sin avisos repetidos. |
+| core/memory/audit.py | Escribe historial, reglas y notas en MySQL con parametros SQL. |
+| core/system/actions.py | Prepara acciones conocidas y exige una confirmacion de un solo uso. |
+| core/brain/local_llm.py | Consulta Ollama de forma async y valida su respuesta JSON. |
+| core/brain/personality.py | Define tono propio, verdad, permisos y perfil vocal original. |
+| core/voice/elevenlabs_voice.py | Sintetiza texto con HTTP async; mantiene audio acotado en RAM. |
+| core/voice/speech_input.py | Transcribe dictado local en workers, sin grabaciones persistentes. |
 | tools/elevenlabs_voice.py | Lista voces y disena/guarda una voz original con confirmacion explicita. |
 | core/services.py | Une estos servicios al ciclo de vida del runtime. |
 | api/assistant.py | Protege las rutas privadas y valida sus contratos. |
@@ -102,7 +102,7 @@ Un evento command.received sigue siendo un mensaje, no una orden shell.
 ## Modelo de texto local
 
 La configuracion predeterminada es THORN_LLM_URL=http://127.0.0.1:11434 y
-THORN_LLM_MODEL=thorn:bastion8. Crear el perfil con tools/install_local_brain.py
+THORN_LLM_MODEL=thorn:bastion9. Crear el perfil con tools/install_local_brain.py
 sobre Qwen ya instalado. Instalar Ollama/modelos es un paso independiente;
 el arranque de T.H.O.R.N no descarga nada. Con Ollama instalado, iniciarlo en
 modo solo local en otra consola:

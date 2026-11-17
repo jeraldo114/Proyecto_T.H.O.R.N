@@ -88,6 +88,14 @@ async def check_api(url: str) -> dict[str, object]:
             pdf.raise_for_status()
             if not any('CEDRO-9' in page['text'] for page in pdf.json()['document']['pages']):
                 raise ValueError('compiled_document_failed')
+            clarify = await client.post('/api/v1/chat/', headers=headers, json={'prompt': 'Retoma'})
+            clarify.raise_for_status()
+            if clarify.json().get('topic_for') != 'resume':
+                raise ValueError('compiled_natural_clarification_failed')
+            task = await client.post('/api/v1/chat/', headers=headers, json={'prompt': 'Compara las dos primeras'})
+            task.raise_for_status()
+            if 'Primero investiga' not in task.json().get('reply', ''):
+                raise ValueError('compiled_research_dialog_failed')
             start = time.monotonic()
             query = asyncio.create_task(client.post('/api/v1/chat/', headers=headers,
                 json={'prompt': 'Mi proyecto de prueba se llama Cedro. Confirma ese nombre en una frase.'}))
@@ -117,7 +125,7 @@ async def check_api(url: str) -> dict[str, object]:
             return {'compiled': True, 'encrypted_storage': True, 'voice_bytes': len(voice.content),
                 'stt': 'local_real_audio', 'model': caps['language']['model'], 'release': RELEASE,
                 'pdf_text': True, 'context_follow_up': True,
-                'local_ocr_assets': True, 'conversation_module': True,
+                'local_ocr_assets': True, 'conversation_module': True, 'natural_clarification': True, 'research_dialog': True,
                  'first_text_ms': first_text_ms,
                 'transcription_ms': stt.json().get('transcription_ms'),
                 'synthesis_ms': float(voice.headers['X-Thorn-Synthesis-Ms']),

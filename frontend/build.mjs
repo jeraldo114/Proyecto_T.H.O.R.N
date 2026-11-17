@@ -14,19 +14,19 @@ const result = await build({
   assetNames: '[name]-[hash]', publicPath: '/hud/assets', metafile: true,
 });
 await copyFile('index.html', 'dist/index.html');
-const worklet = await build({ entryPoints: ['src/microphone-worklet.js'], bundle: true, minify: true,
+const worklet = await build({ entryPoints: ['src/voice/microphone-worklet.js'], bundle: true, minify: true,
   outfile: 'dist/microphone-worklet.js', format: 'esm', target: ['es2022'], metafile: true });
 const files = Object.keys(result.metafile.outputs).map(file => basename(file));
-for (const name of ['pdf-viewer', 'map-viewer']) {
-  await build({ entryPoints: [`src/${name}.js`], bundle: true, minify: true, outfile: `dist/${name}.js`,
+for (const [folder, name] of [['documents', 'pdf-viewer'], ['network', 'map-viewer']]) {
+  await build({ entryPoints: [`src/${folder}/${name}.js`], bundle: true, minify: true, outfile: `dist/${name}.js`,
     format: 'esm', target: ['es2022'], external: ['/hud/assets/ocr.js'] });
   files.push(`${name}.js`);
 }
-await build({ entryPoints: ['src/ocr.js'], bundle: true, minify: true, outfile: 'dist/ocr.js',
+await build({ entryPoints: ['src/documents/ocr.js'], bundle: true, minify: true, outfile: 'dist/ocr.js',
   format: 'esm', target: ['es2022'], plugins: [{ name: 'owned-ocr-worker', setup(builder) {
     builder.onResolve({ filter: /^\.\/spawnWorker$/ }, args => {
       if (args.importer.replaceAll('\\', '/').endsWith('/tesseract.js/src/worker/browser/index.js'))
-        return { path: resolve('src/ocr-worker-spawn.cjs') };
+        return { path: resolve('src/documents/ocr-worker-spawn.cjs') };
     });
   } }] });
 files.push('ocr.js');
@@ -48,11 +48,11 @@ for (const folder of ['cmaps', 'standard_fonts', 'wasm']) {
 }
 files.push(...Object.keys(worklet.metafile.outputs).map(file => basename(file)));
 // El detector se carga solo en modo conversacion; ONNX ejecuta en un worker.
-await build({ entryPoints: ['src/conversation-vad.js'], bundle: true, minify: true,
+await build({ entryPoints: ['src/voice/conversation-vad.js'], bundle: true, minify: true,
   outfile: 'dist/conversation-vad.js', format: 'esm', target: ['es2022'],
   external: ['/hud/assets/ort.wasm.min.mjs'],
   plugins: [{ name: 'local-ort', setup(builder) {
-    builder.onResolve({ filter: /^onnxruntime-web\/wasm$/ }, () => ({ path: resolve('src/vad-ort.js') }));
+    builder.onResolve({ filter: /^onnxruntime-web\/wasm$/ }, () => ({ path: resolve('src/voice/vad-ort.js') }));
   } }],
 });
 files.push('conversation-vad.js');
@@ -62,7 +62,7 @@ for (const [folder, names] of [
 ]) {
   for (const name of names) { await copyFile(`node_modules/${folder}/dist/${name}`, `dist/${name}`); files.push(name); }
 }
-const vision = await build({ entryPoints: ['src/vision-worker.js'], bundle: true, minify: true,
+const vision = await build({ entryPoints: ['src/vision/vision-worker.js'], bundle: true, minify: true,
   outfile: 'dist/vision-worker.js', format: 'esm', target: ['es2022'], metafile: true });
 files.push(...Object.keys(vision.metafile.outputs).map(file => basename(file)));
 for (const name of ['vision_wasm_module_internal.js', 'vision_wasm_module_internal.wasm']) {

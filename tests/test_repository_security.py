@@ -21,7 +21,7 @@ class RepositorySecurityTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 self.assertTrue(private_path(path))
-        for path in (".env.example", "core/db_core.py", "requirements.txt", "SECURITY.md"):
+        for path in (".env.example", "core/memory/db_core.py", "requirements.txt", "SECURITY.md"):
             with self.subTest(path=path):
                 self.assertFalse(private_path(path))
 

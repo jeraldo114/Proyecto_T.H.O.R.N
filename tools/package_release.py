@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from tools.sign_release import initialize_signer, sign, verify
 from tools.check_repository import local_secret_variants
-from core.secure_storage import encode64
+from core.security.secure_storage import encode64
 from core.version import RELEASE, VERSION
 
 

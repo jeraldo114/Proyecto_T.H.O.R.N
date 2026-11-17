@@ -12,8 +12,8 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from core.elevenlabs_voice import ElevenLabsVoice, MAX_AUDIO, VoiceConfig
-from core.personality import PERSONALITY, VOICE_DESCRIPTION, VOICE_PREVIEW, system_prompt
+from core.voice.elevenlabs_voice import ElevenLabsVoice, MAX_AUDIO, VoiceConfig
+from core.brain.personality import PERSONALITY, VOICE_DESCRIPTION, VOICE_PREVIEW, system_prompt
 from tests.test_assistant import MemoryAudit
 from tools.elevenlabs_voice import provider_error, provider_json, write_previews
 

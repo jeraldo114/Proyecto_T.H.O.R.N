@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { LocalOcr } from '../src/ocr.js';
+import { LocalOcr } from '../src/documents/ocr.js';
 
 test('OCR usa recursos locales y reutiliza un worker con salida de texto acotada', async () => {
   let created = 0, options, terminated = 0;

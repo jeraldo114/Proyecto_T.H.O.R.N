@@ -144,12 +144,46 @@ configurado e intenta leer hasta tres resultados públicos para resumirlos con
 fuentes. Wikipedia cubre temas enciclopédicos. La búsqueda web general usa el
 proveedor Brave ya previsto y requiere su clave y habilitarlo expresamente.
 
+**Conversación en lenguaje natural.** Con Conversación activa, «Entendí…»
+muestra la transcripción aceptada. Di «quise decir» y repite la frase completa
+para enviar una consulta corregida. Si «Retoma» encuentra varios turnos,
+puedes responder «la primera», «la segunda» o «la tercera». La elección
+dura 90 segundos y se limita a esa sesión. Si preguntas «Retoma» o
+«Investiga» sin tema, puedes responder con el tema en el turno siguiente
+durante 30 segundos. La búsqueda mantiene su autorización de Internet.
+Si no se distinguen palabras, el HUD lo indica y vuelve a escuchar.
+
+**Tareas por voz.** Di «Investiga sobre cámaras para el taller» y luego
+«compara las dos primeras». T.H.O.R.N muestra los extractos de la última
+investigación de esta sesión. Con «guarda como pendiente» te pide elegir
+la fuente si hay varias. «Guarda la segunda como pendiente» propone la
+fuente concreta y pide un «sí» antes de guardar. «Deshaz el último cambio»
+revierte el último pendiente guardado por este flujo durante la sesión.
+Con **Interrumpir hablando**, Thorn baja la voz en cuanto hablas: «espera» o
+«para» pausan, y cualquier otra frase corta la respuesta y se atiende como
+orden nueva. «Sigue» reanuda la respuesta en pausa con las frases que faltaban,
+continúa un borrador local o retoma una investigación interrumpida si Internet
+sigue autorizado.
+Diagnóstico mide también desde
+el fin de captura hasta el inicio de reproducción cuando hay lectura automática.
+
+Para comparar reconocimiento con tu voz, guarda clips WAV mono PCM16 de
+16 kHz (hasta 15 s) y una lista JSON privada con objetos
+`{"wav":"muestra.wav","text":"lo que dije"}`. Instala el candidato con
+`python tools/install_speech_model.py --large` y ejecuta
+`python tools/compare_speech.py .artifacts/muestras.json`. El informe
+muestra error de palabras, tiempo y RAM por modelo en procesos separados.
+El dictado habitual conserva su modelo ligero. Puedes elegir el modelo instalado
+con `THORN_SPEECH_MODEL` en el perfil privado y reiniciar la aplicación.
+
 **Conversación progresiva.** El texto aparece durante la generación. Con voz
 local automática, una frase completa puede empezar a sonar antes del final.
-Usa Escape para cancelar. Si activas la interrupción experimental antes de
-iniciar la conversación, di «Thorn, espera». El micrófono usa la cancelación
-de eco del navegador y durante la respuesta solo busca esa frase. Su eficacia
-depende del dispositivo, el volumen y la acústica. Diagnóstico muestra la
+La voz local se sintetiza frase a frase: la siguiente se prepara mientras suena
+la actual, y no se leen asteriscos, citas ni URL. Usa Escape para cancelar.
+La interrupción usa la cancelación de eco del navegador; su eficacia depende del
+dispositivo, el volumen y la acústica (con audífonos es más fiable). El nombre
+se detecta con una gramática local en el servidor, explicada en
+[Memoria y fluidez](docs/MEMORIA_Y_FLUIDEZ.md). Diagnóstico muestra la
 última duración observada de transcripción, generación y síntesis.
 
 **Visión y razonamiento opcionales.** Define en el entorno privado
@@ -181,9 +215,9 @@ Las acciones de Windows siguen necesitando su confirmación independiente.
 
 | Carpeta | Qué estoy poniendo ahí |
 | --- | --- |
-| `core/` | Núcleo asíncrono, sensores, IA, voz, sesiones y persistencia. |
+| `core/` | Runtime y bus en la raíz; `brain/`, `voice/`, `network/`, `memory/`, `security/`, `system/` y `documents/` por dominio. |
 | `api/` y `thorn_web/` | API local, permisos y arranque del servidor Django ASGI. |
-| `frontend/` | HUD, ventanas, audio, cámara y gestos. |
+| `frontend/` | HUD: `src/` separado en `voice/`, `network/`, `documents/`, `vision/`, `ui/` y `state/`. |
 | `tools/` | Instaladores, acceso local, respaldos, compilación y firma. |
 | `tests/` | Pruebas del backend; las del HUD están en `frontend/tests/`. |
 | `docs/` | Notas, decisiones y pasos de instalación. |
@@ -204,8 +238,9 @@ npm test
 npm run build
 ```
 
-Bastion 9 cuenta con **221 pruebas de backend y 52 de módulos del frontend**,
-además de pruebas de los flujos del HUD. Pasarlas ayuda a encontrar errores;
+Bastion 9 cuenta con **240 pruebas de backend y 69 de módulos del frontend**,
+además de pruebas de los flujos del HUD (`npm run test:bargein` verifica la
+interrupción con Silero real; necesita `THORN_VOICE_FIXTURE_WAV` con una frase hablada). Pasarlas ayuda a encontrar errores;
 todavía queda probar el uso cotidiano en distintos equipos.
 
 Para profundizar están las [notas del proyecto](docs/NOTAS_DEL_PROYECTO.md),

@@ -90,13 +90,13 @@ dependencias opcionales estan fijadas con hashes y se auditan en CI.
 
 | Archivo | Responsabilidad |
 | --- | --- |
-| frontend/src/microphone.js | Permiso, dispositivo, captura limitada y cierre de tracks/contexto. |
-| frontend/src/microphone-worklet.js | Convierte muestras a PCM en el hilo de audio, sin reproducirlas. |
-| frontend/src/conversation.js | Serializa turnos y cancela resultados tardios. |
-| frontend/src/conversation-vad.js | Silero local, deteccion de silencio, PCM limitado y cierre de entrada. |
-| frontend/src/conversation-loader.js | Carga Silero solamente si se activa conversacion. |
-| frontend/src/vad-ort-session.js | Copia tensores antes de transferirlos al worker, preservando el estado de Silero. |
-| core/speech_input.py | Carga Vosk y reconoce PCM en workers; no abre dispositivos OS. |
+| frontend/src/voice/microphone.js | Permiso, dispositivo, captura limitada y cierre de tracks/contexto. |
+| frontend/src/voice/microphone-worklet.js | Convierte muestras a PCM en el hilo de audio, sin reproducirlas. |
+| frontend/src/voice/conversation.js | Serializa turnos y cancela resultados tardios. |
+| frontend/src/voice/conversation-vad.js | Silero local, deteccion de silencio, PCM limitado y cierre de entrada. |
+| frontend/src/voice/conversation-loader.js | Carga Silero solamente si se activa conversacion. |
+| frontend/src/voice/vad-ort-session.js | Copia tensores antes de transferirlos al worker, preservando el estado de Silero. |
+| core/voice/speech_input.py | Carga Vosk y reconoce PCM en workers; no abre dispositivos OS. |
 | api/assistant.py | Endpoint autenticado de transcripcion, sin llamadas a la nube. |
 | thorn_web/lifespan.py | Limita los bytes reales antes de crear buffers Django. |
 | tools/install_speech_model.py | Descarga y descomprime el modelo oficial, fuera del event loop. |

@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.secure_storage import SECRET_NAMES, Vault, load_vault, save_vault
+from core.security.secure_storage import SECRET_NAMES, Vault, load_vault, save_vault
 from thorn_web.credentials import file_lock
 
 

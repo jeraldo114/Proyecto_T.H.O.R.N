@@ -11,11 +11,11 @@ from django.test import override_settings
 
 from tests import test_web as web
 from tests.test_assistant import MemoryAudit
-from core.actions import ActionController
-from core.local_llm import LocalLanguageModel
-from core.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
+from core.system.actions import ActionController
+from core.brain.local_llm import LocalLanguageModel
+from core.voice.elevenlabs_voice import ElevenLabsVoice, VoiceConfig
 from core.runtime import ThornRuntime
-from core.speech_input import LocalSpeechInput, MAX_PCM_BYTES, TRANSCRIBE_PATH
+from core.voice.speech_input import LocalSpeechInput, MAX_PCM_BYTES, TRANSCRIBE_PATH
 from thorn_web.lifespan import ThornASGI
 
 
@@ -66,6 +66,63 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
         delta, final = [json.loads(line) for line in raw.splitlines()]
         self.assertEqual(delta["delta"], final["result"]["reply"])
         self.assertIsNone(final["result"]["suggested_action"])
+
+    async def test_resume_clarifies_and_reloads_only_the_selected_turn(self) -> None:
+        from unittest.mock import AsyncMock, Mock
+        def row(identity, prompt):
+            return {"id": identity, "prompt": prompt, "reply": "Acuerdo de prueba",
+                    "created_at": "2026-11-04T12:00:00+00:00", "category": "proyecto"}
+        rows = [row(8, "Cámaras para el taller"), row(4, "Cámaras para la casa")]
+        memory = Mock(page=AsyncMock(return_value={"records": rows}), turn=AsyncMock(return_value=rows[1]))
+        self.services.conversations = memory
+        operator = self.services.operator
+        scopes = frozenset({"memory:read"})
+        result = await operator.chat("owner", "Retoma el tema de cámaras", scopes)
+        self.assertIn("Cuál quieres retomar", result["reply"])
+        self.assertEqual(operator.store.state("owner").turns, [])
+        selected = await operator.chat("owner", "la segunda", scopes)
+        self.assertEqual(selected["memory_sources"][0]["id"], 4)
+        memory.turn.assert_awaited_once_with(4)
+        self.assertIsNone(operator.store.state("owner").resume_choices)
+
+    async def test_research_comparison_confirm_and_undo_stay_in_session(self) -> None:
+        from unittest.mock import AsyncMock
+        operator = self.services.operator
+        store = operator.store
+        state = store.state("researcher")
+        state.research_sources = [
+            {"title": "Cámara interior", "url": "https://example.com/interior", "excerpt": "Uso interior"},
+            {"title": "Cámara exterior", "url": "https://example.com/exterior", "excerpt": "Uso exterior"},
+        ]
+        update = AsyncMock(return_value="n" * 32)
+        self.services.audit.update_memory = update
+        self.services.audit.cipher = object()  # La persistencia de esta prueba está simulada.
+        scopes = frozenset({"network:query", "memory:write"})
+        compared = await operator.chat("researcher", "Compara las dos primeras", scopes)
+        self.assertEqual(compared["sources"], state.research_sources)
+        clarify = await operator.chat("researcher", "Guarda como pendiente", scopes)
+        self.assertIn("¿Qué fuente", clarify["reply"])
+        confirmation = await operator.chat("researcher", "La segunda", scopes)
+        self.assertIn("Cámara exterior", confirmation["reply"])
+        update.assert_not_awaited()
+        with self.assertRaisesRegex(ValueError, "command_scope_required"):
+            await operator.chat("researcher", "Sí", frozenset({"network:query"}))
+        update.assert_not_awaited()
+        await operator.chat("researcher", "Guarda la segunda como pendiente", scopes)
+        await operator.chat("researcher", "Sí", scopes)
+        update.assert_awaited_once_with(text="Pendiente: revisar Cámara exterior — https://example.com/exterior")
+        await operator.chat("another-session", "Deshaz el último cambio", scopes)
+        self.assertEqual(update.await_count, 1)
+        await operator.chat("researcher", "Deshaz el último cambio", scopes)
+        update.assert_awaited_with(delete_id="n" * 32)
+        self.assertIsNone(state.undo_note)
+        state.research_sources.append({"title": "Cámara solar", "url": "https://example.com/solar", "excerpt": "Solar"})
+        paired = await operator.chat("researcher", "Compara la primera y la tercera", scopes)
+        self.assertEqual([item["title"] for item in paired["sources"]], ["Cámara interior", "Cámara solar"])
+        confirm_pair = await operator.chat("researcher", "Guarda la segunda como pendiente", scopes)
+        self.assertIn("Cámara solar", confirm_pair["reply"])
+        await operator.chat("researcher", "No", scopes)
+        self.assertEqual(update.await_count, 2)
 
     async def test_all_routes_require_authentication(self) -> None:
         for route in ("capabilities", "alerts", "history", "memory", "network"):
@@ -157,7 +214,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 403)
 
     async def test_local_voice_uses_wav_without_cloud_authorization(self) -> None:
-        from core.local_voice import LocalVoice
+        from core.voice.local_voice import LocalVoice
         from tests.test_local_autonomy import wav_fixture
         await self.services.voice.stop()
         self.services.voice = LocalVoice(self.audit, enabled=True, loader=lambda path: object(),
@@ -171,7 +228,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn('texto privado', json.dumps(self.audit.rows))
 
     async def test_web_consent_is_required_and_normal_chat_stays_local(self) -> None:
-        from core.internet import InternetService
+        from core.network.internet import InternetService
         from tests.test_network import FakeWebClient
         client = FakeWebClient({})
         await self.services.internet.stop()
@@ -189,7 +246,7 @@ class AssistantAPITests(unittest.IsolatedAsyncioTestCase):
 
     async def test_web_sources_return_without_model_and_without_private_context_or_actions(self) -> None:
         from unittest.mock import AsyncMock
-        from core.internet import InternetService
+        from core.network.internet import InternetService
         from tests.test_network import FakeWebClient
         client = FakeWebClient({"query": {"pages": [{"title": "Fuente", "index": 1,
             "fullurl": "https://es.wikipedia.org/wiki/Fuente", "extract": "Informacion real de la fuente."}]}})

@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { VoicePlayback } from '../src/voice-playback.js';
+import { DUCK_LEVEL, VoicePlayback } from '../src/voice/voice-playback.js';
 
 const originalAudio = globalThis.Audio;
 const originalContext = globalThis.AudioContext;
@@ -136,4 +136,33 @@ test('el nucleo recibe RMS de muestras reales y vuelve a cero al detener', async
     assert.equal(await finished, 'stopped'); assert.equal(levels.at(-1), 0); assert.equal(disconnected, 2);
     assert.equal(frame, null);
   } finally { globalThis.requestAnimationFrame = originalRaf; globalThis.cancelAnimationFrame = originalCancel; }
+});
+
+test('pausar libera el turno y sigue desde el mismo audio sin sintetizar de nuevo', async () => {
+  const player = new VoicePlayback(() => {});
+  await player.start(new Blob(['audio']));
+  const current = player.audio;
+  current.currentTime = 3;
+  const first = player.finished;
+  assert(player.pause());
+  assert.equal(await first, 'paused');
+  await player.resume();
+  assert.equal(player.state, 'playing');
+  assert.equal(player.audio, current);
+  assert.equal(current.currentTime, 3);
+  assert.equal(instances.length, 1);
+  player.stop();
+});
+
+test('bajar la voz mientras el operador habla conserva el volumen elegido', async () => {
+  const player = new VoicePlayback(() => {});
+  player.setVolume(0.8);
+  await player.start(new Blob(['first']));
+  player.duck(true);
+  assert.equal(instances[0].volume, 0.8 * DUCK_LEVEL);
+  await player.start(new Blob(['second']));
+  assert.equal(instances[1].volume, 0.8 * DUCK_LEVEL, 'la frase siguiente empieza también atenuada');
+  player.duck(false);
+  assert.equal(instances[1].volume, 0.8);
+  player.stop();
 });

@@ -12,22 +12,22 @@ from enum import StrEnum
 from types import TracebackType
 from typing import TYPE_CHECKING
 
-from .event_bus import EventBus
-from .events import EventPriority, EventType, ThornEvent
-from .system_sensor import SystemSensor
-from .sessions import SessionAuthority
-from .version import RELEASE
+from core.event_bus import EventBus
+from core.events import EventPriority, EventType, ThornEvent
+from core.system.system_sensor import SystemSensor
+from core.security.sessions import SessionAuthority
+from core.version import RELEASE
 
 logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
-    from .services import AssistantServices
+    from core.services import AssistantServices
 DatabaseStart = Callable[[], Awaitable[object]]
 DatabaseClose = Callable[[], Awaitable[None]]
 
 
 def _load_database_hooks() -> tuple[DatabaseStart, DatabaseClose]:
     """Carga dependencias de persistencia en el hilo de inicializacion."""
-    from .db_core import cerrar_motor_datos, inicializar_motor_datos
+    from core.memory.db_core import cerrar_motor_datos, inicializar_motor_datos
 
     return inicializar_motor_datos, cerrar_motor_datos
 

@@ -2,18 +2,39 @@
 
 Abre `THORN.code-workspace` desde **Archivo > Abrir area de trabajo desde archivo**
 en Visual Studio Code. Tambien puedes ejecutar `code THORN.code-workspace` desde
-la raiz. Los numeros ordenan las areas del explorador; las carpetas fisicas
-conservan sus nombres para que los imports, scripts y datos sigan en su sitio.
+la raiz. Los numeros ordenan las areas del explorador. Dentro de `core/` y
+`frontend/src/` el codigo esta separado por dominio (cerebro, voz, red,
+memoria...), para que cada carpeta responda a una sola pregunta.
+
+## Por dominio
+
+| Dominio | Backend (`core/`) | HUD (`frontend/src/`) |
+| --- | --- | --- |
+| Nucleo | `runtime.py`, `event_bus.py`, `events.py`, `services.py`, `native_worker.py`, `paths.py`, `version.py`, `loopback.py`, `logging_config.py` | `hud.js`, `hud.css` (entrada) |
+| Cerebro | `brain/`: modelo local, motor Ollama, personalidad, ordenes, coordinador de turnos, interaccion y preferencias | — |
+| Voz | `voice/`: dictado Vosk y deteccion del nombre, texto para hablar, Piper, ElevenLabs opcional | `voice/`: conversacion, VAD, interrupcion, nombre, cola de voz, microfono y reproduccion |
+| Red | `network/`: sensor local, Internet de solo lectura, cliente HTTPS publico, mapas | `network/`: ordenes de red, diagnostico, fuentes y visor de mapas |
+| Memoria | `memory/`: pool MySQL, auditoria y conversaciones cifradas | — |
+| Seguridad | `security/`: sesiones, almacen cifrado, archivos protegidos y respaldos | — |
+| Sistema | `system/`: sensor del equipo, alertas y acciones de Windows con confirmacion | — |
+| Documentos | `documents/`: lector PDF (`service.py`) y su proceso aislado (`worker.py`) | `documents/`: visor PDF y OCR |
+| Vision | — | `vision/`: camara, gestos y detector de manos |
+| Interfaz | — | `ui/`: escritorio, ventanas, paneles, nucleo 3D y estado del asistente |
+| Estado del HUD | — | `state/`: sesion, espacio de trabajo y formatos (no se llama `data/`: ese nombre esta reservado para datos privados y Git lo ignora) |
+
+`core/paths.py` se queda en la raiz de `core/`: calcula la carpeta del proyecto
+desde su propia ubicacion. La carpeta `data/` y los nombres internos «Bastion8»
+del almacen cifrado no se renombran: DPAPI vincula los secretos a esa ruta.
 
 ## El tablero de trabajo
 
 | Area en Visual Studio Code | Carpeta real | Aqui se trabaja en... |
 | --- | --- | --- |
 | 00 - Inicio | Raiz | README, plantillas, dependencias y puntos de entrada. |
-| 01 - Nucleo asincrono | `core/` | Eventos, sensores, IA, voz, sesiones y cifrado. |
+| 01 - Nucleo asincrono | `core/` | Runtime y bus en la raiz; cerebro, voz, red, memoria, seguridad, sistema y documentos en subcarpetas. |
 | 02 - API local | `api/` | Peticiones del HUD, permisos, validaciones y respuestas. |
 | 03 - Servidor Django | `thorn_web/` | Rutas HTTP, configuracion y ciclo de vida ASGI. |
-| 04 - HUD visual | `frontend/` | Interfaz, audio, microfono y nucleo 3D. |
+| 04 - HUD visual | `frontend/` | `src/` por dominio (voz, red, documentos, vision, interfaz, estado); pruebas en `tests/`. |
 | 05 - Herramientas | `tools/` | Instalacion de modelos, respaldos, compilacion y firma. |
 | 06 - Pruebas | `tests/` | Contratos y casos de error del backend. Las del HUD viven en `frontend/tests/`. |
 | 07 - Documentacion | `docs/` | Guias para entender, configurar y mantener T.H.O.R.N. |
@@ -32,21 +53,21 @@ Cada carpeta de codigo aparece una sola vez en la vista organizada.
 - **El nucleo:** comienza por `core/runtime.py`, sigue por `core/event_bus.py`
   y despues por `core/services.py`. El primero supervisa, el segundo reparte
   mensajes y el tercero conecta las capacidades del asistente.
-- **Persistencia:** `core/db_core.py` presta conexiones; `core/audit.py` guarda
-  historial y notas. `core/secure_storage.py` protege el contenido sensible.
-- **Conversacion:** `frontend/src/conversation.js` coordina los turnos;
-  `core/speech_input.py`, `core/local_llm.py` y `core/local_voice.py` reconocen,
-  responden y sintetizan. `frontend/src/voice-playback.js` mide el audio que
-  mueve el emblema de `frontend/src/core-scene.js`.
+- **Persistencia:** `core/memory/db_core.py` presta conexiones; `core/memory/audit.py` guarda
+  historial y notas. `core/security/secure_storage.py` protege el contenido sensible.
+- **Conversacion:** `frontend/src/voice/conversation.js` coordina los turnos;
+  `core/voice/speech_input.py`, `core/brain/local_llm.py` y `core/voice/local_voice.py` reconocen,
+  responden y sintetizan. `frontend/src/voice/voice-playback.js` mide el audio que
+  mueve el emblema de `frontend/src/ui/core-scene.js`.
 - **Aspecto y controles:** `frontend/index.html`, `frontend/src/hud.css` y
   `frontend/src/hud.js`. Cambia las fuentes de datos en la API o el sensor;
   conserva la distincion entre una lectura vigente y una muestra anterior.
-- **Acciones Windows:** `core/actions.py` define el catalogo permitido.
+- **Acciones Windows:** `core/system/actions.py` define el catalogo permitido.
   Una sugerencia del modelo pasa por preparacion y confirmacion antes de abrir
   una aplicacion; ampliar el catalogo requiere revisar ese recorrido completo.
-- **Bastion 9:** `core/operator.py` coordina turnos y herramientas;
-  `core/interaction.py` limita contexto y resultados por sesion. `core/documents.py`
-  aisla el lector PDF; `core/maps.py` obtiene coordenadas con fuente. En el HUD,
+- **Bastion 9:** `core/brain/operator.py` coordina turnos y herramientas;
+  `core/brain/interaction.py` limita contexto y resultados por sesion. `core/documents/service.py`
+  aisla el lector PDF; `core/network/maps.py` obtiene coordenadas con fuente. En el HUD,
   `operator-tools.js` conecta sus controles y `camera.js` administra el dispositivo;
   `vision-worker.js` ejecuta el detector de manos fuera del hilo de interfaz.
   La guia [Bastion 9](BASTION_9.md) une el recorrido completo.

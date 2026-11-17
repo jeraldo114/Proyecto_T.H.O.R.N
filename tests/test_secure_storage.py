@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from cryptography.hazmat.primitives.asymmetric import ed25519, rsa
 
-from core.audit import AuditStore
-from core.secure_backup import RecoveryKeys, seal_backup, open_backup
-from core.secure_storage import StorageCipher, StorageUnavailable, Vault, load_vault, save_vault
+from core.memory.audit import AuditStore
+from core.security.secure_backup import RecoveryKeys, seal_backup, open_backup
+from core.security.secure_storage import StorageCipher, StorageUnavailable, Vault, load_vault, save_vault
 
 
 class CipherTests(unittest.TestCase):
@@ -109,7 +109,7 @@ class ProtectedAuditTests(unittest.IsolatedAsyncioTestCase):
         self.cur = Mock(execute=AsyncMock(), fetchone=AsyncMock(), fetchall=AsyncMock(), lastrowid=42)
         @asynccontextmanager
         async def session(): yield self.conn, self.cur
-        self.patcher = patch('core.audit.db_session', session); self.patcher.start(); self.addCleanup(self.patcher.stop)
+        self.patcher = patch('core.memory.audit.db_session', session); self.patcher.start(); self.addCleanup(self.patcher.stop)
         self.audit = AuditStore(enabled=True, cipher=self.cipher)
 
     async def test_note_and_audit_commit_without_plaintext_sql(self) -> None:

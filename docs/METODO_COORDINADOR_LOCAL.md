@@ -10,9 +10,9 @@ sí puede gastar más RAM sin resolver nuestros errores.
 
 ## 1. Punto de partida: medir lo que existe
 
-Hoy `core/commands.py` reconoce órdenes completas. `core/operator.py` las atiende
+Hoy `core/brain/commands.py` reconoce órdenes completas. `core/brain/operator.py` las atiende
 antes de consultar a Ollama. El HUD también reconoce algunas órdenes en
-`frontend/src/workspace.js` y `frontend/src/network.js`. Los permisos y las
+`frontend/src/state/workspace.js` y `frontend/src/network/network.js`. Los permisos y las
 confirmaciones de Windows se comprueban aparte.
 
 La primera evaluación usa **30 ejemplos sintéticos escritos y revisados**:

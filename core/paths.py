@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from .version import STORAGE_DIRECTORY
+from core.version import STORAGE_DIRECTORY
 
 RESOURCE_ROOT = Path(__file__).resolve().parents[1]
 

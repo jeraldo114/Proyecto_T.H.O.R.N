@@ -13,14 +13,14 @@ import sys
 import httpx
 from pypdf import PdfWriter
 
-from core.commands import command_intent
-from core.document_worker import parse_pdf
-from core.documents import DocumentService, parse_isolated, question_excerpts
-from core.interaction import InteractionStore
-from core.local_llm import LocalLanguageModel
-from core.sessions import SessionAuthority
-from core.maps import find_places
-from core.internet import InternetService
+from core.brain.commands import command_intent
+from core.documents.worker import parse_pdf
+from core.documents.service import DocumentService, parse_isolated, question_excerpts
+from core.brain.interaction import InteractionStore
+from core.brain.local_llm import LocalLanguageModel
+from core.security.sessions import SessionAuthority
+from core.network.maps import find_places
+from core.network.internet import InternetService
 from core.event_bus import EventBus
 from tests.test_network import FakeWebClient
 from tests.test_assistant import MemoryAudit
@@ -115,7 +115,7 @@ class InteractionTests(unittest.IsolatedAsyncioTestCase):
         async def fake_parser(*args, **options):
             process = await spawn(sys.executable, '-c', 'import sys,time;sys.stdin.buffer.read();time.sleep(60)', **options)
             children.append(process); ready.set(); return process
-        with patch('core.documents.asyncio.create_subprocess_exec', side_effect=fake_parser):
+        with patch('core.documents.service.asyncio.create_subprocess_exec', side_effect=fake_parser):
             task = asyncio.create_task(parse_isolated(blank_pdf()))
             await asyncio.wait_for(ready.wait(), 2)
             task.cancel()

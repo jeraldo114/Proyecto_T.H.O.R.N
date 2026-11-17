@@ -71,21 +71,67 @@ superan, la herramienta falla explícitamente; no recorta el archivo en silencio
 4. Después de una respuesta, puedes seguir durante 30 segundos sin repetir el
    nombre. Tras esa ventana vuelve a esperar «Thorn».
 
-Vosk español puede escribir el nombre como «Tor», «Torn» o «Thor»; aceptamos esas
-variantes al principio de la frase. No activamos el modelo por encontrar esas
-letras dentro de «tornado» u otra palabra. Aun así, puede haber falsos positivos.
-Esto es un filtro sobre STT local, **no un detector dedicado de bajo consumo**.
-El micrófono y la transcripción siguen trabajando mientras el modo está activo;
-las frases ambientales descartadas no pasan al modelo, al campo de transcripción
-ni al archivo de conversación.
+### Cómo se reconoce el nombre
 
-La entrada se cierra durante la respuesta, no hay escucha simultánea para
-interrumpir la voz. Se detiene al desconectar, ocultar la ventana o retirar el
-permiso. El primer permiso o gesto de audio del navegador sigue siendo necesario.
+«Thorn» no es una palabra del español. En texto libre Vosk la escribe como «tom»,
+«son», «don», «fourth» o la omite. Por eso, mientras espera el nombre, el servidor
+usa una **gramática cerrada** sobre el modelo pequeño (`core/voice/speech_input.py`):
+solo puede elegir entre «thorn», «oye/hola thorn», palabras comunes que suenan
+parecido («toma», «torre», «tormenta», «son», «por»…) y `[unk]`. Si el nombre
+abre la frase, recorta el audio en ese punto y transcribe **solo lo dicho
+después**. Si no está, no transcribe nada: la charla ambiental no se convierte
+en texto.
 
-El final de frase se decide tras 650 ms de silencio y la reapertura tras una
+Medido con voz sintética de Piper: la gramática detectó 7/7 frases con el nombre
+y 0/12 falsas alarmas; el filtro anterior por alias, 2/7. La voz sintética no es
+la tuya: mide con tus grabaciones antes de confiar en ella.
+
+```powershell
+.\.venv\Scripts\python.exe tools\evaluate_wake.py .artifacts\nombre.json
+```
+
+El manifiesto es una lista `{"wav": "...", "wake": true|false}` con WAV mono PCM16
+de 16 kHz. Incluye negativas que empiecen parecido («toma nota», «torre», «son
+las tres»). Si falta el modelo pequeño, el HUD vuelve al filtro por alias
+(`frontend/src/voice/wake-word.js`), cuya lista debe coincidir con `WAKE_ALIASES` de
+`core/brain/commands.py`; `tests/test_wake_word.py` lo comprueba. Al detectar el nombre
+suena un tono breve si la lectura automática está activa.
+
+No es un detector dedicado de bajo consumo: el VAD y el micrófono siguen activos
+mientras el modo está encendido. Se detiene al desconectar, ocultar la ventana o
+retirar el permiso. El primer permiso o gesto de audio del navegador sigue
+siendo necesario.
+
+### Interrumpir mientras habla
+
+Marca **Interrumpir hablando** antes de iniciar la conversación. Durante la
+respuesta el micrófono queda abierto con cancelación de eco y:
+
+1. Al primer indicio de voz, Thorn baja su volumen al 15 % (no espera la transcripción).
+2. Se transcribe lo que dijiste y se clasifica (`frontend/src/voice/barge-in.js`):
+   - «Espera», «para», «silencio», con o sin el nombre: **pausa**; «sigue» la
+     retoma, incluidas las frases que faltaban.
+   - Eco de su propia voz (la mayoría de las palabras ya estaban en la respuesta),
+     asentimientos («sí», «ajá») o ruido: recupera el volumen y continúa.
+   - Cualquier otra frase: **corta la respuesta** y atiende la nueva orden.
+3. La escucha se rearma tras cada fragmento. Antes quedaba sorda después del
+   primero (por ejemplo, tras captar su propio eco), y por eso a veces no se dejaba
+   interrumpir.
+
+Con parlantes y sin buena cancelación de eco puede bajar el volumen por su propio
+eco. Para probar, usa primero audífonos.
+
+El final de frase se decide tras 1,05 s de silencio y la reapertura tras una
 respuesta espera 250 ms para reducir el eco. Son valores de funcionamiento,
 no una promesa de latencia total: también cuentan STT, el modelo, TTS y el equipo.
+
+### Voz por frases
+
+Con Piper, la respuesta se sintetiza frase a frase: la primera suena antes y la
+siguiente se prepara mientras suena la actual (`frontend/src/voice/speech-queue.js`).
+Antes de sintetizar, `core/voice/speech_text.py` quita marcado, citas `[1]` y URL,
+pronuncia «12,5 gigabytes», «23 milisegundos» y «Thorn» en lugar de deletrear
+«T.H.O.R.N». Lo que ves en el HUD no cambia.
 
 ## OCR de una página escaneada
 

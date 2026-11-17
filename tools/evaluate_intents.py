@@ -13,7 +13,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from core.commands import command_intent
+from core.brain.commands import command_intent
 
 
 def percentile(values: list[float], fraction: float) -> float:
@@ -57,7 +57,7 @@ def evaluate(cases: list[dict[str, Any]], *, repeats: int = 50) -> dict[str, Any
         # no necesita copiar conversaciones privadas en otro archivo.
         details.append({"id": case["id"], "group": case["group"], "correct": correct,
                         "expected": case["expected"], "actual": actual})
-    return {"schema": 1, "scope": "core.commands.command_intent_only",
+    return {"schema": 1, "scope": "core.brain.commands.command_intent_only",
             "cases": len(cases), "synthetic_smoke_corpus": True,
             "accuracy": sum(r["correct"] for r in details) / len(cases),
             "command_precision": tp / (tp + fp) if tp + fp else None,
@@ -82,7 +82,7 @@ def main() -> int:
             raise ValueError("corpus_too_large")
         report = evaluate(json.loads(raw.decode("utf-8")), repeats=args.repeats)
         report.update(corpus_sha256=hashlib.sha256(raw).hexdigest(),
-                      parser_sha256=hashlib.sha256((ROOT / "core/commands.py").read_bytes()).hexdigest(),
+                      parser_sha256=hashlib.sha256((ROOT / "core/brain/commands.py").read_bytes()).hexdigest(),
                       python=sys.version.split()[0])
     except (OSError, ValueError, TypeError, KeyError, RecursionError):
         print("No se pudo evaluar: revisa el formato del corpus y los límites.", file=sys.stderr)

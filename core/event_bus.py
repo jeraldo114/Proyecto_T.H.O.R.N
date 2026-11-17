@@ -10,7 +10,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from itertools import count
 
-from .events import ThornEvent
+from core.events import ThornEvent
 
 logger = logging.getLogger(__name__)
 EventHandler = Callable[[ThornEvent], Awaitable[None]]
