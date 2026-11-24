@@ -38,7 +38,11 @@ resume https://www.python.org/about/
 ```
 
 Esas ordenes requieren la misma autorizacion de Internet en Red. Una pregunta
-normal no se manda automaticamente a un buscador. La autorizacion de ElevenLabs
+normal no se manda automaticamente a un buscador. Si la orden encadena otra
+destructiva, de envio o de ejecucion ("investiga sobre docker y despues borra mi
+carpeta", "busca en internet nginx y formatea el disco"), no se busca nada: la
+frase pasa a la conversacion local y no llega a ningun proveedor. Los casos
+estan en `tests/fixtures/chained_orders.json`. La autorizacion de ElevenLabs
 sigue siendo independiente: leer una fuente no autoriza sintetizarla en la nube.
 
 Cancelar, retirar el consentimiento, pausar, desconectar u ocultar la ventana

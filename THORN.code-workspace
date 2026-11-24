@@ -193,6 +193,62 @@
         "problemMatcher": []
       },
       {
+        "label": "THORN: generar datos de interaccion",
+        "detail": "Datos sinteticos train/dev/test del modelo de interaccion en .artifacts/interaction.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/generate_interaction_data.py"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: evaluar modelo de interaccion",
+        "detail": "Reglas frente a un modelo de Ollama en el conjunto de prueba (necesita Ollama en marcha).",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/evaluate_interaction.py", "--modelo", "${input:modeloInteraccion}", "--limite", "150"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: evaluar modelo propio de interaccion",
+        "detail": "Modelo entrenado servido en Ollama con gramatica, protegido e hibrido, en las frases escritas a mano.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/evaluate_interaction.py", "--modelo", "${input:modeloPropio}", "--entrenado", "--hibrido",
+                 "--conjunto", "holdout"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: grabar tus frases para la prueba ciega",
+        "detail": "Dices cada frase al microfono, Vosk la transcribe y tu eliges que debia hacer Thorn. Guarda tu voz en .artifacts/voz-real.",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/record_interaction_phrases.py", "--salida", ".artifacts/voz-real/${input:loteVoz}"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "presentation": { "focus": true, "panel": "dedicated" },
+        "problemMatcher": []
+      },
+      {
+        "label": "THORN: evaluar con tus frases grabadas",
+        "detail": "Modelo propio protegido frente a las reglas con lo que oyo Vosk de tus frases (necesita Ollama).",
+        "type": "process",
+        "command": "${workspaceFolder:00 - Inicio}/.venv/bin/python",
+        "windows": { "command": "${workspaceFolder:00 - Inicio}/.venv/Scripts/python.exe" },
+        "args": ["tools/evaluate_interaction.py", "--modelo", "${input:modeloPropio}", "--entrenado",
+                 "--conjunto", "voz", "--frases", ".artifacts/voz-real/${input:loteVoz}/frases.json"],
+        "options": { "cwd": "${workspaceFolder:00 - Inicio}" },
+        "group": "test",
+        "problemMatcher": []
+      },
+      {
         "label": "THORN: prueba de interrupcion (navegador)",
         "detail": "Silero real en Chromium. Requiere el servidor en marcha y antes la tarea «crear audio de prueba».",
         "type": "shell",
@@ -222,6 +278,24 @@
         "type": "promptString",
         "description": "Manifiesto JSON con grabaciones de dictado ({\"wav\": \"...\", \"text\": \"...\"})",
         "default": ".artifacts/muestras.json"
+      },
+      {
+        "id": "modeloInteraccion",
+        "type": "promptString",
+        "description": "Modelo de Ollama para el modelo de interaccion",
+        "default": "thorn:bastion9"
+      },
+      {
+        "id": "modeloPropio",
+        "type": "promptString",
+        "description": "Modelo de interaccion propio importado en Ollama",
+        "default": "thorn-interaccion:v4-q8"
+      },
+      {
+        "id": "loteVoz",
+        "type": "promptString",
+        "description": "Lote de frases grabadas en .artifacts/voz-real (uno nuevo para cada prueba ciega)",
+        "default": "lote-1"
       },
       {
         "id": "urlServidor",

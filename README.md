@@ -247,6 +247,7 @@ todavía queda probar el uso cotidiano en distintos equipos.
 
 Para profundizar están las [notas del proyecto](docs/NOTAS_DEL_PROYECTO.md),
 el [método para el coordinador local](docs/METODO_COORDINADOR_LOCAL.md),
+el [plan del modelo de interacción propio](docs/MODELO_DE_INTERACCION.md),
 la [guía de seguridad](SECURITY.md) y los pasos de
 [publicación en GitHub](docs/PUBLICACION_GITHUB.md).
 

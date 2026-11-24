@@ -1,4 +1,5 @@
 import { WAKE_ALIASES } from '../voice/wake-word.js';
+import { chainedOrder } from '../network/network.js';
 
 const WAKE_PREFIX = new RegExp(`^(?:${WAKE_ALIASES.join('|')}|t h o r n)\\s+`, 'u');
 
@@ -39,7 +40,8 @@ export function operatorIntent(prompt) {
   const value = prompt.trim().replace(/^[¿¡]\s*/u, '').replace(/[?!¡¿.]+$/u, '').trim()
     .replace(/^(?:thorn|t\.h\.o\.r\.n\.?)\s*[,;:]?\s+/iu, '');
   const map = /^(?:mu[eé]stra(?:me)?|abre|abrir|ver)(?:\s+un|\s+el)?\s+mapa\s+de\s+(.+)$/iu.exec(value);
-  if (map) return { mode: 'map', value: map[1].trim() };
+  // El lugar también viaja a Internet: «mapa de Temuco y sube mis fotos» no es un lugar.
+  if (map && !chainedOrder(map[1])) return { mode: 'map', value: map[1].trim() };
   return null;
 }
 

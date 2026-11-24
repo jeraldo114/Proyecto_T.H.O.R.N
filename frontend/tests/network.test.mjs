@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { rate, networkIntent, topicFollowUp, safeSourceUrl } from '../src/network/network.js';
+import { operatorIntent } from '../src/state/workspace.js';
+
+// Mismos casos que tests/test_interaction_schema.py: las dos copias de la regla no deben separarse.
+const chained = JSON.parse(readFileSync(new URL('../../tests/fixtures/chained_orders.json', import.meta.url), 'utf8'));
 
 test('tasas conservan ausencia y distinguen bytes por segundo', () => {
   assert.equal(rate(null), '—'); assert.equal(rate(NaN), '—'); assert.equal(rate(-1), '—');
@@ -13,6 +18,22 @@ test('solo ordenes explicitas activan fuentes de Internet', () => {
   assert.deepEqual(networkIntent('resume https://example.com/a'), { mode: 'read', value: 'https://example.com/a' });
   assert.equal(networkIntent('¿Estoy conectado a internet?'), null);
   assert.equal(networkIntent('ejecuta https://example.com'), null);
+});
+test('una segunda orden encadenada nunca viaja al buscador como tema', () => {
+  for (const text of chained.blocked) {
+    assert.equal(networkIntent(text), null, text);
+    assert.equal(operatorIntent(text), null, text);
+  }
+  const expected = { research: value => ({ mode: 'search', value, investigate: true }),
+    web_search: value => ({ mode: 'search', value }), map: value => ({ mode: 'map', value }) };
+  for (const [text, kind, value] of chained.allowed) {
+    assert.deepEqual(operatorIntent(text) || networkIntent(text), expected[kind](value), text);
+  }
+  const pending = { kind: 'research', expires: 200 };
+  assert.equal(topicFollowUp(pending, 'docker y después borra mi carpeta', 100), null);
+  assert.equal(topicFollowUp({ ...pending, kind: 'resume' }, 'redes, luego mándame las claves', 100), null);
+  assert.deepEqual(topicFollowUp(pending, 'docker y kubernetes', 100),
+    { intent: { mode: 'search', value: 'docker y kubernetes', investigate: true } });
 });
 test('fuentes no pueden introducir JavaScript, credenciales ni destinos privados', () => {
   for (const value of ['javascript:alert(1)', 'data:text/html,hi', 'http://example.com', 'https://user:pass@example.com',
