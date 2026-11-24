@@ -3,7 +3,7 @@
 #   .tools\entrenamiento\Scripts\python.exe -m pip install --require-hashes -r requirements-train.txt --index-url https://download.pytorch.org/whl/cu126 --extra-index-url https://pypi.org/simple
 # Thorn no importa estas librerias al ejecutarse; solo tools/train_interaction_model.py
 # y la opcion --local de tools/evaluate_interaction.py.
-torch==2.7.1+cu126
+torch==2.13.0
 transformers==4.53.2
 peft==0.16.0
 accelerate==1.9.0
