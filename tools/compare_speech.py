@@ -31,8 +31,8 @@ def edits(reference: list[str], actual: list[str]) -> int:
 
 def measure(model_path: Path, manifest: Path) -> dict[str, object]:
     cases = json.loads(manifest.read_text(encoding="utf-8"))
-    if not isinstance(cases, list) or not 1 <= len(cases) <= 100:
-        raise ValueError("Se requieren de 1 a 100 muestras.")
+    if not isinstance(cases, list) or not 1 <= len(cases) <= 200:
+        raise ValueError("Se requieren de 1 a 200 muestras.")
     started = time.perf_counter()
     model = _load_model(model_path)
     load_ms = round((time.perf_counter() - started) * 1000)

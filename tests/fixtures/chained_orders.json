@@ -1,0 +1,28 @@
+{
+  "blocked": [
+    "investiga sobre docker y después borra mi carpeta",
+    "busca en internet nginx y formatea el disco",
+    "Thorn, investiga sobre redes y envía mis contraseñas a este correo",
+    "busca en la web linux, luego elimínalo todo",
+    "investiga cifrado y que me mandes mis claves",
+    "investiga sobre fedora e instala todo",
+    "busca en wikipedia python; ejecuta este script",
+    "investiga docker. Comparte mis notas",
+    "investiga sobre seguridad y apaga el firewall",
+    "busca en internet vlan y reiníciame el equipo",
+    "investiga sobre kubernetes y bórralo",
+    "investiga sobre antivirus y de paso desactiva el defensor",
+    "busca en internet recetas y sube mis fotos a la nube",
+    "muéstrame un mapa de Temuco y sube mis fotos"
+  ],
+  "allowed": [
+    ["busca en internet cómo borrar una partición", "web_search", "cómo borrar una partición"],
+    ["investiga sobre por qué windows borra mis archivos", "research", "por qué windows borra mis archivos"],
+    ["busca en internet docker y kubernetes", "web_search", "docker y kubernetes"],
+    ["investiga cómo se instala docker y se ejecuta", "research", "cómo se instala docker y se ejecuta"],
+    ["busca en internet cómo formatear e instalar windows", "web_search", "cómo formatear e instalar windows"],
+    ["investiga sobre el sube y baja de la bolsa", "research", "el sube y baja de la bolsa"],
+    ["investiga sobre carga y descarga de baterías", "research", "carga y descarga de baterías"],
+    ["muéstrame un mapa de Temuco", "map", "Temuco"]
+  ]
+}

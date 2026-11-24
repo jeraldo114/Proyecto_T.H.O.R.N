@@ -113,6 +113,9 @@ Audio y transcripcion viven en RAM; el dictado normal no escribe grabaciones a
 disco ni almacena transcripciones en MySQL. La auditoria contiene ID, numero de
 bytes, modelo y resultado, no el audio ni el texto. RAM y cierre de buffers no
 son una garantia de borrado forense de memoria, swap o herramientas del OS.
+La unica excepcion es manual y fuera del HUD: `tools/record_interaction_phrases.py`
+guarda WAV de tus frases en `.artifacts/voz-real/` para la prueba ciega del modelo
+de interaccion. Ver [Modelo de interaccion](MODELO_DE_INTERACCION.md).
 
 Cancelar, desconectar, pausar, ocultar la pestana o cerrar la pagina detiene el
 dispositivo y descarta capturas pendientes. Cambiar de vista cancela solo el

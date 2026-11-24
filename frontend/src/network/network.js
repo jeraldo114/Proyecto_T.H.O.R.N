@@ -7,9 +7,27 @@ export function rate(value) {
   return value >= 1024 * 1024 ? `${(value / 1024 / 1024).toFixed(2)} MiB/s` : `${(value / 1024).toFixed(1)} KiB/s`;
 }
 
+// Segunda orden destructiva, de envío o de ejecución encadenada tras «y», «luego», una coma…
+// Formas sin tildes: imperativo, usted y subjuntivo («y que borres»), con pronombres («bórralo»).
+// Se excluyen palabras que también son sustantivos o adjetivos frecuentes en un tema
+// («pública», «descarga», «copia», «vacía»). Copia exacta en core/brain/interaction_schema.py.
+const CHAINED_VERBS = [
+  ['borr|elimin|formate|instal|desinstal|ejecut|reinici|envi|reenvi|mand|desactiv|deshabilit', 'a|e|es'],
+  ['apag', 'a|ue|ues'], ['sub|compart|sobrescrib', 'e|a|as'], ['destru', 'ye|ya|yas'],
+].map(([stems, endings]) => `(?:${stems})(?:${endings})`).join('|');
+const CHAINED_ORDER = new RegExp('(?:[,;:.]\\s*|\\b(?:y|e|pero|luego|despues|entonces|ademas|tambien)\\s+)'
+  + '(?:(?:luego|despues|tambien|ademas|de paso|por favor|porfa|quiero que|necesito que|que|me|te|nos|le|les|lo|la|los|las|se lo|se la|se los|se las)\\s+)*'
+  + `(?:${CHAINED_VERBS})(?:me|te|se|nos|le|les)?(?:lo|la|los|las)?\\b`, 'u');
+
+/** «investiga X y borra Y» no es un tema: esa frase no debe llegar al buscador. */
+export function chainedOrder(text) {
+  return CHAINED_ORDER.test(text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase());
+}
+
 /** Solo ordenes explicitas salen a la red; el modelo no decide destinos. */
 export function networkIntent(prompt) {
   const value = prompt.trim().replace(WAKE_PREFIX, '');
+  if (chainedOrder(value)) return null;
   const research = /^investiga(?: en (?:internet|la web))?\s+(?:sobre\s+)?(.+)$/iu.exec(value);
   if (research) return { mode: 'search', value: research[1].trim(), investigate: true };
   const search = /^(?:busca|buscar|consulta|investiga)(?:\s+en)?\s+(?:internet|la web|wikipedia)\s+(?:sobre\s+)?(.+)$/iu.exec(value);
@@ -22,7 +40,7 @@ export function topicFollowUp(pending, prompt, now) {
   if (!pending || now >= pending.expires) return null;
   const value = prompt.trim().replace(/^[¿¡]+\s*/u, '').replace(WAKE_PREFIX, '')
     .replace(/^sobre\s+/iu, '').replace(/[.!?]+$/u, '').trim();
-  if (!value || value.length > 160 || /[\r\n]/u.test(value) ||
+  if (!value || value.length > 160 || /[\r\n]/u.test(value) || chainedOrder(value) ||
       /^(?:no|cancela|cambiar|espera|silencio|detente|para|abre|muestra|pon|revisa|olvida|borra|retoma|investiga|busca|lee|ejecuta|estado|sistema|limpiar|dime|expl[ií]came|qu[eé]|cu[aá]l|c[oó]mo|cu[aá]ndo)(?:\s|[,.:;!?]|$)/iu.test(value)) return null;
   return pending.kind === 'resume' ? { prompt: `Retoma el tema de ${value}` }
     : pending.kind === 'research' ? { intent: { mode: 'search', value, investigate: true } } : null;
